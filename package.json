@@ -1,0 +1,5 @@
+{
+  "name": "tilt-survey-recorder", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": {"test": "node --test calc.test.js sketch.test.js store.test.js", "test:browser": "node tests/browser.mjs", "start": "node serve.mjs"},
+  "devDependencies": {"playwright": "1.58.2"}
+}
