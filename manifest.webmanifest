@@ -1,1 +1,1 @@
-{"name":"傾斜測量紀錄","short_name":"傾斜測量","lang":"zh-Hant","start_url":"./?release=0.1.0","scope":"./","display":"standalone","background_color":"#f0f5f4","theme_color":"#153e43","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}
+{"name":"傾斜測量紀錄","short_name":"傾斜測量","lang":"zh-Hant","start_url":"./?release=0.3.0","scope":"./","display":"standalone","background_color":"#f0f5f4","theme_color":"#153e43","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}

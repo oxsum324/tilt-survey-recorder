@@ -3,7 +3,7 @@ import {labels,isConfirmed} from './model.js';
 import {sketch,buildingParameters,escapeXml as esc} from './sketch.js';
 const field=(h,key)=>esc(h[key]||'○○');
 const footer='△X、H 為實測值，傾斜率＝△X／H，分母取整數（四捨五入）。圖示傾斜角度經放大，非依比例；立面為參數化示意，非實測立面。';
-const title=(p,name,unit='公分')=>`<header class="sheet-header"><div class="org">${field(p.header,'orgName')}</div><div>鑑定案編號：${field(p.header,'caseNumber')}</div><h2>${name}</h2><div class="sheet-meta"><span>使用儀器：${field(p.header,'instrument')}</span><span>測量日期：${field(p.header,'surveyDate')}</span><span>住戶編號：${field(p.header,'householdNo')}</span><span>單位：${unit}</span></div></header>`;
+export const title=(p,name,unit='公分')=>`<header class="sheet-header"><div class="org">${field(p.header,'orgName')}</div><div>鑑定案編號：${field(p.header,'caseNumber')}</div><h2>${name}</h2><div class="sheet-meta"><span>使用儀器：${field(p.header,'instrument')}</span><span>測量日期：${field(p.header,'surveyDate')}</span><span>住戶編號：${field(p.header,'householdNo')}</span><span>單位：${unit}</span></div></header>`;
 function time(value){if(!value)return '尚未確認';const date=new Date(value);return Number.isNaN(+date)?esc(value):esc(new Intl.DateTimeFormat('zh-TW',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(date))+'（臺灣時間）';}
 export function reportIssues(project) {
   const problems=[];if(!project.pairs.length)problems.push('尚無測點組');
