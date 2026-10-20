@@ -1,4 +1,4 @@
-import {projectFingerprint} from './integrity.js';
+import {projectFingerprint,mediaIds,validateBackupMedia} from './integrity.js';
 // IndexedDB transaction / media backup core adapted from:
 // oxsum324/level-survey-recorder, store.js, commit 78f2ae02646510290854e89ff1ba901776bce9f5.
 // 複製後獨立演進。 Normalization, strict import checks, and completion handlers extended here.
@@ -80,7 +80,6 @@ export function normalizeProject(value) {
   if(!p.map&&p.pairs.some(q=>q.mapMarker))throw Error('測點位置缺少對應底圖');
   p.appVersion=VERSION;return p;
 }
-function mediaIds(p){return [...new Set([p.map?.mediaId,...p.pairs.flatMap(pair=>pair.photos.map(photo=>photo.mediaId))].filter(Boolean))];}
 const blobAsDataUrl=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});
 export async function makeBackup(project,read=loadMedia,encode=blobAsDataUrl) {
   const p=normalizeProject(project),media=[];
@@ -97,7 +96,7 @@ export function parseBackup(contents) {
     let bytes;try{bytes=Uint8Array.from(atob(item.dataUrl.split(',')[1]),c=>c.charCodeAt(0));}catch{throw Error('案件影像編碼無效');}
     if(bytes.byteLength>60*1024*1024)throw Error('單張影像超過 60 MB');return {id:item.id,blob:new Blob([bytes],{type:item.dataUrl.split(';')[0].slice(5)})};
   });
-  for(const id of mediaIds(project))if(!ids.has(id))throw Error('案件缺少照片或底圖原檔');
+  validateBackupMedia(project,media);
   if(backup.integrity!==undefined&&(backup.integrity?.algorithm!=='SHA-256'||! /^[a-f0-9]{64}$/.test(backup.integrity.sha256)))throw Error('案件指紋格式無效');
   return {project,media,integrity:backup.integrity||null};
 }
