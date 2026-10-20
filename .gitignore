@@ -6,3 +6,4 @@ test-results/
 *.tiltsurvey
 *.pdf
 _site/
+private-denylist.txt
