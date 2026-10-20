@@ -23,8 +23,8 @@ function updateStatus(){
   $('#saveStatus').textContent=failedSave?'本機保存失敗，請立即匯出':unexported?'有未匯出的變更':'本機已保存 · 已匯出';
   $('#saveStatus').className=failedSave?'status-error':unexported?'status-pending':'status-saved';
 }
-function queueSave(){clearTimeout(saveTimer);if(storageBlocked)return Promise.resolve();const snapshot=structuredClone(project);saving=saving.catch(()=>{}).then(()=>saveProject(snapshot)).then(()=>{failedSave=false;updateStatus();}).catch(e=>{failedSave=true;updateStatus();notice(`本機保存未完成：${e.message}。目前畫面資料仍可匯出。`,true);});return saving;}
-function changed(){project.updatedAt=new Date(Math.max(Date.now(),Date.parse(project.updatedAt)+1)).toISOString();reportStale=true;updateStatus();clearTimeout(saveTimer);saveTimer=setTimeout(queueSave,200);}
+function queueSave(){clearTimeout(saveTimer);if(storageBlocked)return Promise.resolve();const snapshot=structuredClone(project);saving=saving.catch(()=>{}).then(()=>saveProject(snapshot)).then(()=>{failedSave=false;if(snapshot.updatedAt===project.updatedAt)document.documentElement.dataset.saveState='saved';updateStatus();}).catch(e=>{failedSave=true;updateStatus();notice(`本機保存未完成：${e.message}。目前畫面資料仍可匯出。`,true);});return saving;}
+function changed(){document.documentElement.dataset.saveState='pending';project.updatedAt=new Date(Math.max(Date.now(),Date.parse(project.updatedAt)+1)).toISOString();reportStale=true;updateStatus();clearTimeout(saveTimer);saveTimer=setTimeout(queueSave,200);}
 function dialog(title,text,buttons,{reason=false}={}) {
   const d=$('#actionDialog');$('#dialogTitle').textContent=title;$('#dialogText').textContent=text;$('#reasonLabel').hidden=!reason;$('#dialogReason').value='';
   $('#dialogButtons').innerHTML=buttons.map(([value,label])=>`<button value="${value}"${value==='cancel'?'':' class="primary"'}>${label}</button>`).join('');
@@ -83,12 +83,13 @@ function render(){
 }
 function resizeReports(){const root=$('#reportRoot');if(root)root.style.setProperty('--report-scale',Math.min(1,root.clientWidth/(210*96/25.4)));}
 function buildReport(){
+  $('#reportRoot').dataset.ready='false';resizeReports();
   const job=++reportGeneration,snapshot=structuredClone(project),options={kind:reportKind,includeRaw,includePhotos,includeMap};reportStale=true;
   reportPromise=(async()=>{
     const issues=outputIssues(snapshot,options),missing=Object.keys(snapshot.header).filter(k=>!snapshot.header[k].trim());
     $('#reportWarnings').innerHTML=issues.length?`<p class="error">請先完成下列事項：</p><ul>${issues.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:missing.length?'<p class="warning">尚有表頭欄位未填，附件以「○○」佔位。</p>':'';
-    $('#reportRoot').innerHTML=issues.length?'':'<p class="report-loading">正在整理附件影像…</p>';if(issues.length)return;
-    try{const html=await fullReport(snapshot,options);if(job!==reportGeneration||tab!=='reports'||snapshot.updatedAt!==project.updatedAt)return;$('#reportRoot').innerHTML=html;await Promise.all([...$('#reportRoot').querySelectorAll('img')].map(img=>img.decode()));reportStale=false;resizeReports();}catch(e){if(job===reportGeneration&&tab==='reports'){$('#reportRoot').innerHTML='';notice(`附件預覽未完成：${e.message}`,true);}}
+    $('#reportRoot').innerHTML=issues.length?'':'<p class="report-loading">正在整理附件影像…</p>';if(issues.length){$('#reportRoot').dataset.ready='true';return;}
+    try{const html=await fullReport(snapshot,options);if(job!==reportGeneration||tab!=='reports'||snapshot.updatedAt!==project.updatedAt)return;resizeReports();$('#reportRoot').innerHTML=html;await document.fonts.ready;await Promise.all([...$('#reportRoot').querySelectorAll('img')].map(img=>img.decode()));reportStale=false;resizeReports();$('#reportRoot').dataset.ready='true';}catch(e){if(job===reportGeneration&&tab==='reports'){$('#reportRoot').innerHTML='';notice(`附件預覽未完成：${e.message}`,true);}}
   })();return reportPromise;
 }
 function hasReadings(pair){return [pair.inPlane.A,pair.outPlane.A,pair.inPlane.B,pair.outPlane.B,pair.C].some(m=>JSON.stringify(m).match(/"(?:dxCm|upperCm|lowerCm|HD|VD|N|E|Z|hCm)":"[^"]+"/));}
