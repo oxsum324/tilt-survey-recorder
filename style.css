@@ -18,3 +18,7 @@
 [hidden]{display:none!important}
 
 @media screen{html.sunlight .sign-button{min-width:48px;flex-basis:48px}html.sunlight .check-field{min-height:48px}}
+
+/* Keep fingerprints in the gap between the result grid and its outer frame. */
+.result-sheet .sheet-footer .data-fingerprint{position:absolute;left:2mm;bottom:calc(100% + 1mm);white-space:nowrap}
+.result-sheet .sheet-footer .full-fingerprint{left:50mm}

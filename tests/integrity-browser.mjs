@@ -9,5 +9,11 @@ try{
  await page.locator('#verifyFile').setInputFiles('output/integrity/case.tiltsurvey');await poll(page,async()=>assert.match(await page.locator('#notice').innerText(),/案件檔指紋一致/));await poll(page,async()=>assert.deepEqual(await saved(),current));
  const tampered=JSON.parse(await fs.readFile('output/integrity/case.tiltsurvey','utf8'));tampered.project.pairs[0].inPlane.A.rounds[0].dxCm='99';await fs.writeFile('output/integrity/tampered.tiltsurvey',JSON.stringify(tampered));await page.locator('#verifyFile').setInputFiles('output/integrity/tampered.tiltsurvey');await poll(page,async()=>assert.match(await page.locator('#notice').innerText(),/案件檔指紋不一致/));await poll(page,async()=>assert.deepEqual(await saved(),current));console.log('PASS 指紋驗證與竄改偵測不匯入、不覆蓋目前案件');
  await page.locator('[data-tab="reports"]').click();await reportReady(page);await poll(page,async()=>assert.equal(await page.locator('.data-fingerprint:not(.full-fingerprint)').count(),3));await poll(page,async()=>assert.equal(await page.locator('.full-fingerprint').count(),1));console.log('PASS 原始讀數與成果表列短指紋，末頁列完整指紋');
+ await page.locator('#includeRaw').uncheck();await reportReady(page);await page.emulateMedia({media:'print'});
+ await poll(page,async()=>assert.equal(await page.locator('.result-sheet').first().evaluate(sheet=>{
+  const grid=sheet.querySelector('.result-grid').getBoundingClientRect(),frameBottom=sheet.getBoundingClientRect().top+287*96/25.4,boxes=[...sheet.querySelectorAll('.data-fingerprint')].map(e=>e.getBoundingClientRect());
+  return boxes.length===2&&boxes.every(b=>b.top>=grid.bottom&&b.bottom<frameBottom)&&boxes[0].right<=boxes[1].left;
+ }),true));console.log('PASS 成果頁短碼與完整碼在表格及外框之間，兩碼不重疊');await page.emulateMedia({media:'screen'});
+
  const unsupported=await browser.newContext();await unsupported.addInitScript(()=>Object.defineProperty(navigator,'canShare',{value:()=>false}));const other=await unsupported.newPage();await other.goto(base);await other.locator('[data-field="header.orgName"]').waitFor();await poll(other,async()=>assert.equal(await other.locator('#shareCaseButton').isVisible(),false));await unsupported.close();console.log('PASS 不支援檔案分享時隱藏分享入口');
 }finally{await context.close();await browser.close();await new Promise(r=>server.close(r));}
