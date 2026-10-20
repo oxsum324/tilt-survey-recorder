@@ -1,3 +1,4 @@
+import {projectFingerprint} from './integrity.js';
 import {reportDocument,reportIssues,title} from './report.js';
 import {labels} from './model.js';
 import {escapeXml as esc} from './sketch.js';
@@ -32,5 +33,10 @@ export async function fullReport(project,{kind='all',includeRaw=true,includePhot
   let html=['all','results'].includes(kind)?reportDocument(project,{includeRaw}):'';
   if(kind==='photos'||kind==='all'&&includePhotos)html+=await photoReport(project,read);
   if(kind==='map'||kind==='all'&&includeMap)html+=await mapReport(project,read);
-  return html;
+  const digest=await projectFingerprint(project,read),short=`<div class="data-fingerprint">資料指紋 SHA-256：${digest.slice(0,16)}</div>`;
+  const count=(html.match(/<section class="sheet /g)||[]).length;let page=0;
+  return html.replace(/(<section class="sheet [^"]+">)([\s\S]*?)(<\/section>)/g,(_,start,body,end)=>{
+    const footer=short+(++page===count?`<div class="data-fingerprint full-fingerprint">完整 SHA-256：${digest}</div>`:'');
+    return start+(body.includes('<footer ')?body.replace(/(<footer[^>]*>)/,'$1'+footer):body+`<footer class="raw-fingerprint">${footer}</footer>`)+end;
+  });
 }

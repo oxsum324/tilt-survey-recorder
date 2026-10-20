@@ -10,4 +10,4 @@ function assertTextLayout(s){for(const box of s.texts){assert.ok(box.x>=0&&box.y
 for(const corner of ['left','right'])for(const axis of ['inPlane','outPlane'])test(`主要文字外框不交疊、不出格：${corner} ${axis}`,()=>{const {pair,f,p}=setup();pair.corner=corner;assertTextLayout(sketch(pair,f,calculatePair(pair,f)[axis],axis,p.settings));});
 test('高樓層與未知 TB 的主要文字外框',()=>{const {pair,f,p}=setup();f.building.floorHeightsCm=Array(12).fill('320');pair.tbHeightCm='';assertTextLayout(sketch(pair,f,calculatePair(pair,f).inPlane,'inPlane',p.settings));});
 test('自訂測線位置使用實際立面橫向比例',()=>{const {pair,f,p}=setup();pair.corner='custom';pair.cornerOffsetCm='225';const g=sketchGeometry(pair,f,calculatePair(pair,f).inPlane,'inPlane',p.settings);assert.equal(g.pointX,(g.x0+g.x1)/2);});
-test('无效立面參數明確拒絕'.replace('无','無'),()=>{const {pair,f}=setup();f.building.widthCm='';assert.throws(()=>sketchGeometry(pair,f,calculatePair(pair,f).inPlane,'inPlane'),/參數無效/);});
+test('無效立面參數明確拒絕',()=>{const {pair,f}=setup();f.building.widthCm='';assert.throws(()=>sketchGeometry(pair,f,calculatePair(pair,f).inPlane,'inPlane'),/參數無效/);});

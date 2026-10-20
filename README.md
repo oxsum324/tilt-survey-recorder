@@ -1,8 +1,10 @@
-# 傾斜測量紀錄 V0.3.0
+# 傾斜測量紀錄 V0.4.0
 
 現場功能測試版。純前端 ES modules，無建置工具、無後端，案件、讀數、原始照片與底圖只存在本機瀏覽器。
 
-- [開啟測試工具](https://oxsum324.github.io/tilt-survey-recorder/?release=0.3.0)
+- [合併發布後的測試網址](https://oxsum324.github.io/tilt-survey-recorder/?release=0.4.0)
+- 本版以 PR 交付，尚未合併 main；網址版本參數本身不會部署新版。
+- [V0.4.0 交付說明](docs/versions/v0.4.0.md)
 - [V0.3.0 交付與測試](docs/versions/v0.3.0.md)
 - [第一期交付紀錄](docs/versions/v0.1.0.md)
 - [規格檢視與後續精進](docs/review-and-next.md)
@@ -66,3 +68,25 @@ html2pdf 的本機程式與授權檔位於 `vendor/`，取自上述水準測量�
 - 架構與 IndexedDB／離線核心：[level-survey-recorder](https://github.com/oxsum324/level-survey-recorder/tree/78f2ae02646510290854e89ff1ba901776bce9f5)，實際 main HEAD `78f2ae02646510290854e89ff1ba901776bce9f5`（V0.6.3）。複製／改寫範圍見 store.js、sw.js 檔頭，複製後獨立演進。
 - 照片圈註來源：[section-properties-calculator](https://github.com/oxsum324/section-properties-calculator/tree/2bd935b31e0421743a982c80c7f27fcc0e40d2bc)，實際 master HEAD `2bd935b31e0421743a982c80c7f27fcc0e40d2bc`。annotation.js 最後異動 `641e627d731122d7451aaf1b349e761928efcb6e`；V0.3.0 複製圈註核心並新增 callout，未複製 planar annotation 功能。
 - Pages 發布設定依 [GitHub 官方工作流程文件](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。
+
+## 案件資料指紋與分享
+
+案件檔附 SHA-256，鍵值排序後計算，包含原始讀數、確認／更正紀錄、照片標註、佈設位置及每個引用媒體原檔的 SHA-256。成果表與原始讀數表頁尾列前 16 碼，附件末頁列完整 64 碼。
+
+案件檔中的媒體必須與案件引用完全對應；未引用、重複或缺少原檔均拒絕匯入與指紋驗證，不會略過額外媒體而顯示一致。舊檔未附指紋時也適用此完整性檢查。
+
+排除欄位：appVersion、createdAt、updatedAt、lastExportedAt、nextPairIndex、settings.defaultMode。這些欄位記錄軟體版本、保存／匯出時間及新增預設，不改變既有量測內容。瀏覽器的強光、常亮與目前分頁偏好不屬於案件資料。
+
+「驗證案件檔指紋」只在記憶體計算，不匯入、不覆蓋目前案件；舊檔未附指紋時只能計算，無法聲稱一致。指紋用於比對內容，並非身分簽章或第三方認證。
+
+支援檔案分享的裝置顯示「準備分享案件檔」，完成媒體讀取與指紋計算、確認實際檔案可分享後，改顯示「分享已準備的案件檔」。再次點擊才直接呼叫系統分享，讓大型案件準備耗時不影響操作授權。編輯或取代案件會作廢已準備的檔案，須重新準備。取消分享不更新匯出時間；分享進行中有新變更時，新變更仍列為未匯出。
+
+## 分方向作業方式與舊案件
+
+每個方向的 mode 可為 A／B／C，空字串表示沿用測點組預設。切換測點組預設會讓兩方向重新沿用；可再對單一方向選取其他方式，所有替代讀數均保留。任一方向採 C 時只輸入一組共用座標；A 的共用垂距不會代替 B／C 由讀數計算的垂距。
+
+schema 維持 1。V0.4.0 以前或未附 appVersion 的舊案件，兩方向一律承接原測點組設定，包括曾殘留其他方向 mode 的案件；這與舊版計算程式的優先順序一致。V0.4.0 起保留方向各自的選擇及空字串沿用設定。原確認快照不改寫，更正仍須填原因。
+
+## 發布清單與私人字串
+
+只發布 build-site.mjs 明列的檔案。private-denylist.txt 為本機忽略檔，每行一個私人字串；可參考 private-denylist.example.txt 的示例格式。CI 由使用者設定 TILT_PRIVATE_DENYLIST secret（換行分隔）；兩個來源合併檢查，均未提供時會警告並僅套用通用路徑規則。這次只清理新 HEAD，既有公開 Git 歷史未改寫。

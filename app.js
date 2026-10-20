@@ -1,4 +1,5 @@
-import {VERSION,createProject,createFacade,createPair,measurement,labels,isConfirmed,confirmObservation,sampleProject} from './model.js';
+import {verifyFingerprint} from './integrity.js';
+import {VERSION,createProject,createFacade,createPair,measurement,labels,isConfirmed,confirmObservation,sampleProject,modeFor} from './model.js';
 import {calculatePair} from './calc.js';
 import {normalizeProject,loadProject,saveProject,replaceProject,makeBackup,parseBackup} from './store.js';
 import {buildingParameters,escapeXml as esc} from './sketch.js';
@@ -8,6 +9,7 @@ import {setupDisplay} from './display.js';
 import {imagePdf} from './pdf.js';
 import {downloadBlob} from './media.js';
 let project,tab='case',selectedPair,selectedFacade,includeRaw=true,includePhotos=true,includeMap=true,reportKind='all',reportPromise=Promise.resolve(),reportGeneration=0,saveTimer,saving=Promise.resolve(),failedSave=false,storageBlocked=false,reportStale=true;
+let preparedShare=null,shareGeneration=0,sharing=false;
 const $=selector=>document.querySelector(selector),workspace=$('#workspace');
 const option=(value,text,current)=>`<option value="${value}"${value===current?' selected':''}>${text}</option>`;
 function input(label,path,value,{unit='',signed=false,placeholder='',type='text',numeric=true}={}) {
@@ -23,8 +25,8 @@ function updateStatus(){
   $('#saveStatus').textContent=failedSave?'本機保存失敗，請立即匯出':unexported?'有未匯出的變更':'本機已保存 · 已匯出';
   $('#saveStatus').className=failedSave?'status-error':unexported?'status-pending':'status-saved';
 }
-function queueSave(){clearTimeout(saveTimer);if(storageBlocked)return Promise.resolve();const snapshot=structuredClone(project);saving=saving.catch(()=>{}).then(()=>saveProject(snapshot)).then(()=>{failedSave=false;updateStatus();}).catch(e=>{failedSave=true;updateStatus();notice(`本機保存未完成：${e.message}。目前畫面資料仍可匯出。`,true);});return saving;}
-function changed(){project.updatedAt=new Date(Math.max(Date.now(),Date.parse(project.updatedAt)+1)).toISOString();reportStale=true;updateStatus();clearTimeout(saveTimer);saveTimer=setTimeout(queueSave,200);}
+function queueSave(){clearTimeout(saveTimer);if(storageBlocked)return Promise.resolve();const snapshot=structuredClone(project);saving=saving.catch(()=>{}).then(()=>saveProject(snapshot)).then(()=>{failedSave=false;if(snapshot.updatedAt===project.updatedAt)document.documentElement.dataset.saveState='saved';updateStatus();}).catch(e=>{failedSave=true;updateStatus();notice(`本機保存未完成：${e.message}。目前畫面資料仍可匯出。`,true);});return saving;}
+function changed(){invalidateShare();document.documentElement.dataset.saveState='pending';project.updatedAt=new Date(Math.max(Date.now(),Date.parse(project.updatedAt)+1)).toISOString();reportStale=true;updateStatus();clearTimeout(saveTimer);saveTimer=setTimeout(queueSave,200);}
 function dialog(title,text,buttons,{reason=false}={}) {
   const d=$('#actionDialog');$('#dialogTitle').textContent=title;$('#dialogText').textContent=text;$('#reasonLabel').hidden=!reason;$('#dialogReason').value='';
   $('#dialogButtons').innerHTML=buttons.map(([value,label])=>`<button value="${value}"${value==='cancel'?'':' class="primary"'}>${label}</button>`).join('');
@@ -57,16 +59,16 @@ function resultView(pair){
 }
 function numericRound(round,prefix,keys){return `<div class="coordinate-table">${['tp','tb'].map(pos=>`<div class="coordinate-point"><h4>${pos==='tp'?'TP 上測點':'TB 下測點'}</h4><div class="coordinate-fields">${keys.map(([key,t])=>input(t,`${prefix}.${pos}.${key}`,round[pos][key],{unit:'m',signed:key!=='HD'})).join('')}</div></div>`).join('')}</div>`;}
 function directionForm(pair,index,axis){
-  const m=pair[axis],prefix=`pairs.${index}.${axis}`,l=labels(pair,project.settings),isIn=axis==='inPlane';
-  return `<section class="card measurement-card"><h3>${l[axis]}｜${isIn?'立面內（左右）':'立面外（前後）'}</h3>${select('施測狀態',`${prefix}.status`,m.status,[['measured','已施測／輸入中'],['skipped','未施測（須填原因）']])}${m.status==='skipped'?input('未施測原因',`${prefix}.skipReason`,m.skipReason,{numeric:false}):pair.mode==='C'?'<p>此分量使用本測點組共用座標。</p>':`<div class="form-grid">${pair.mode==='A'&&!pair.sharedH?input('垂距 H',`${prefix}.A.hCm`,m.A.hCm,{unit:'cm'}):pair.mode==='B'?select('測站位置',`${prefix}.B.station`,m.B.station,isIn?[['rightSide','立面右側延伸線'],['leftSide','立面左側延伸線']]:[['front','立面正前方']]):'<p class="hint">H 取上方共用垂距。</p>'}<label class="field"><span>測回數</span><select data-rounds="${index}|${axis}|${pair.mode}">${[1,2].map(n=>option(String(n),`${n} 測回`,String(m[pair.mode].rounds.length))).join('')}</select></label></div>${m[pair.mode].rounds.map((r,i)=>`<div class="round-block"><h4>第 ${i+1} 測回</h4>${pair.mode==='A'?`${select('偏移量來源',`${prefix}.A.rounds.${i}.source`,r.source,[['offset','直接輸入偏移量'],['ruler','上讀數／下讀數之差']])}<div class="form-grid">${r.source==='ruler'?input('上讀數',`${prefix}.A.rounds.${i}.upperCm`,r.upperCm,{unit:'cm',signed:true})+input('下讀數',`${prefix}.A.rounds.${i}.lowerCm`,r.lowerCm,{unit:'cm',signed:true}):input('偏移量 ΔX',`${prefix}.A.rounds.${i}.dxCm`,r.dxCm,{unit:'cm'})}${select('傾斜方向',`${prefix}.A.rounds.${i}.dir`,r.dir,isIn?[['right','向右傾'],['left','向左傾']]:[['back','向後傾'],['front','向前傾']])}</div>`:numericRound(r,`${prefix}.B.rounds.${i}`,[['HD','HD 水平距'],['VD','VD 高差']])}</div>`).join('')}`}</section>`;
+  const m=pair[axis],prefix=`pairs.${index}.${axis}`,l=labels(pair,project.settings),isIn=axis==='inPlane',mode=modeFor(pair,axis);
+  return `<section class="card measurement-card"><h3>${l[axis]}｜${isIn?'立面內（左右）':'立面外（前後）'}</h3>${select('本方向作業方式',`${prefix}.mode`,m.mode??'',[['',`沿用測點組（${pair.mode}）`],['A','A｜直接偏移量'],['B','B｜水平距與高差'],['C','C｜三維座標']])}${select('施測狀態',`${prefix}.status`,m.status,[['measured','已施測／輸入中'],['skipped','未施測（須填原因）']])}${m.status==='skipped'?input('未施測原因',`${prefix}.skipReason`,m.skipReason,{numeric:false}):mode==='C'?'<p>此分量使用本測點組共用座標。</p>':`<div class="form-grid">${mode==='A'&&!pair.sharedH?input('垂距 H',`${prefix}.A.hCm`,m.A.hCm,{unit:'cm'}):mode==='B'?select('測站位置',`${prefix}.B.station`,m.B.station,isIn?[['rightSide','立面右側延伸線'],['leftSide','立面左側延伸線']]:[['front','立面正前方']]):'<p class="hint">H 取上方共用垂距。</p>'}<label class="field"><span>測回數</span><select data-rounds="${index}|${axis}|${mode}">${[1,2].map(n=>option(String(n),`${n} 測回`,String(m[mode].rounds.length))).join('')}</select></label></div>${m[mode].rounds.map((r,i)=>`<div class="round-block"><h4>第 ${i+1} 測回</h4>${mode==='A'?`${select('偏移量來源',`${prefix}.A.rounds.${i}.source`,r.source,[['offset','直接輸入偏移量'],['ruler','上讀數／下讀數之差']])}<div class="form-grid">${r.source==='ruler'?input('上讀數',`${prefix}.A.rounds.${i}.upperCm`,r.upperCm,{unit:'cm',signed:true})+input('下讀數',`${prefix}.A.rounds.${i}.lowerCm`,r.lowerCm,{unit:'cm',signed:true}):input('偏移量 ΔX',`${prefix}.A.rounds.${i}.dxCm`,r.dxCm,{unit:'cm'})}${select('傾斜方向',`${prefix}.A.rounds.${i}.dir`,r.dir,isIn?[['right','向右傾'],['left','向左傾']]:[['back','向後傾'],['front','向前傾']])}</div>`:numericRound(r,`${prefix}.B.rounds.${i}`,[['HD','HD 水平距'],['VD','VD 高差']])}</div>`).join('')}`}</section>`;
 }
 function readingsView(){
-  const index=project.pairs.findIndex(p=>p.id===selectedPair),pair=project.pairs[index];
+  const index=project.pairs.findIndex(p=>p.id===selectedPair),pair=project.pairs[index],uses=mode=>pair&&['inPlane','outPlane'].some(axis=>modeFor(pair,axis)===mode);
   let content=heading('現場讀數','先確認測點，再記錄兩個方向','方向基準：站在立面外、面向立面。向後表示頂部朝建物內側。')+
     `<div class="button-row pair-list">${project.pairs.map(p=>`<button data-pair="${p.id}" class="${p.id===selectedPair?'primary':''}">測點組 ${p.index}${isConfirmed(p,project.facades.find(f=>f.id===p.facadeId))?' ✓':''}</button>`).join('')}<button data-action="add-pair">＋新增測點組</button></div>`;
   if(!pair)return content+'<section class="card">請新增測點組。</section>';
-  content+=`<div id="liveResults" class="live-results" aria-live="polite">${resultView(pair)}</div><section class="card"><div class="form-grid">${select('作業方式',`pairs.${index}.mode`,pair.mode,[['A','A｜直接偏移量'],['B','B｜水平距與高差'],['C','C｜三維座標']])}${select('所屬立面',`pairs.${index}.facadeId`,pair.facadeId,project.facades.map(f=>[f.id,f.name]))}${select('量測角位置',`pairs.${index}.corner`,pair.corner,[['right','右角'],['left','左角'],['custom','自訂測線位置']])}${pair.corner==='custom'?input('測線距立面左端',`pairs.${index}.cornerOffsetCm`,pair.cornerOffsetCm,{unit:'cm'}):''}${input('TB 離地高度',`pairs.${index}.tbHeightCm`,pair.tbHeightCm,{unit:'cm',placeholder:'未量測可留空'})}</div>${input('現場備註',`pairs.${index}.note`,pair.note,{numeric:false})}${pair.mode==='A'?check('兩方向共用相同垂距 H',`pairs.${index}.sharedH`,pair.sharedH)+(pair.sharedH?input('共用垂距 H',`pairs.${index}.inPlane.A.hCm`,pair.inPlane.A.hCm,{unit:'cm'}):''):''}${pair.mode==='B'?'<p class="hint">測站應位於待測分量的方向線上；視線斜交時，量得值為視線方向分量。</p>':''}${pair.mode==='C'?'<p class="hint">N（北）、E（東）、Z（高程），請先在「立面參數」設定基準。</p>':''}</section>`;
-  if(pair.mode==='C')content+=`<section class="card"><h3>TP／TB 共用三維座標</h3><label class="field"><span>座標測回數</span><select data-rounds="${index}|pair|C">${[1,2].map(n=>option(String(n),`${n} 測回`,String(pair.C.rounds.length))).join('')}</select></label>${pair.C.rounds.map((r,i)=>`<div class="round-block"><h4>第 ${i+1} 測回</h4>${numericRound(r,`pairs.${index}.C.rounds.${i}`,[['N','N（北）'],['E','E（東）'],['Z','Z（高程）']])}</div>`).join('')}</section>`;
+  content+=`<div id="liveResults" class="live-results" aria-live="polite">${resultView(pair)}</div><section class="card"><div class="form-grid">${select('測點組預設作業方式（切換套用兩方向）',`pairs.${index}.mode`,pair.mode,[['A','A｜直接偏移量'],['B','B｜水平距與高差'],['C','C｜三維座標']])}${select('所屬立面',`pairs.${index}.facadeId`,pair.facadeId,project.facades.map(f=>[f.id,f.name]))}${select('量測角位置',`pairs.${index}.corner`,pair.corner,[['right','右角'],['left','左角'],['custom','自訂測線位置']])}${pair.corner==='custom'?input('測線距立面左端',`pairs.${index}.cornerOffsetCm`,pair.cornerOffsetCm,{unit:'cm'}):''}${input('TB 離地高度',`pairs.${index}.tbHeightCm`,pair.tbHeightCm,{unit:'cm',placeholder:'未量測可留空'})}</div>${input('現場備註',`pairs.${index}.note`,pair.note,{numeric:false})}${uses('A')?check('兩方向共用相同垂距 H',`pairs.${index}.sharedH`,pair.sharedH)+(pair.sharedH?input('共用垂距 H',`pairs.${index}.inPlane.A.hCm`,pair.inPlane.A.hCm,{unit:'cm'}):''):''}${uses('B')?'<p class="hint">測站應位於待測分量的方向線上；視線斜交時，量得值為視線方向分量。</p>':''}${uses('C')?'<p class="hint">N（北）、E（東）、Z（高程），請先在「立面參數」設定基準。</p>':''}</section>`;
+  if(uses('C'))content+=`<section class="card"><h3>TP／TB 共用三維座標</h3><label class="field"><span>座標測回數</span><select data-rounds="${index}|pair|C">${[1,2].map(n=>option(String(n),`${n} 測回`,String(pair.C.rounds.length))).join('')}</select></label>${pair.C.rounds.map((r,i)=>`<div class="round-block"><h4>第 ${i+1} 測回</h4>${numericRound(r,`pairs.${index}.C.rounds.${i}`,[['N','N（北）'],['E','E（東）'],['Z','Z（高程）']])}</div>`).join('')}</section>`;
   content+=`<div class="measurement-grid">${directionForm(pair,index,'inPlane')}${directionForm(pair,index,'outPlane')}</div><section class="card confirm-card"><div id="confirmState"></div><div class="button-row"><button class="primary" data-action="confirm">確認本組讀數</button><button data-action="preview">預覽成果表</button><button data-action="tab-photos">點位照片與標註</button><button data-action="tab-map">平面圖標示</button><button class="danger-text" data-action="delete-pair">刪除本組</button></div><p class="hint">草稿會自動保存；產出成果前須確認讀數。更正已確認的讀數時，會要求填原因。</p></section>`;
   return content;
 }
@@ -83,26 +85,56 @@ function render(){
 }
 function resizeReports(){const root=$('#reportRoot');if(root)root.style.setProperty('--report-scale',Math.min(1,root.clientWidth/(210*96/25.4)));}
 function buildReport(){
+  $('#reportRoot').dataset.ready='false';resizeReports();
   const job=++reportGeneration,snapshot=structuredClone(project),options={kind:reportKind,includeRaw,includePhotos,includeMap};reportStale=true;
   reportPromise=(async()=>{
     const issues=outputIssues(snapshot,options),missing=Object.keys(snapshot.header).filter(k=>!snapshot.header[k].trim());
     $('#reportWarnings').innerHTML=issues.length?`<p class="error">請先完成下列事項：</p><ul>${issues.map(i=>`<li>${esc(i)}</li>`).join('')}</ul>`:missing.length?'<p class="warning">尚有表頭欄位未填，附件以「○○」佔位。</p>':'';
-    $('#reportRoot').innerHTML=issues.length?'':'<p class="report-loading">正在整理附件影像…</p>';if(issues.length)return;
-    try{const html=await fullReport(snapshot,options);if(job!==reportGeneration||tab!=='reports'||snapshot.updatedAt!==project.updatedAt)return;$('#reportRoot').innerHTML=html;await Promise.all([...$('#reportRoot').querySelectorAll('img')].map(img=>img.decode()));reportStale=false;resizeReports();}catch(e){if(job===reportGeneration&&tab==='reports'){$('#reportRoot').innerHTML='';notice(`附件預覽未完成：${e.message}`,true);}}
+    $('#reportRoot').innerHTML=issues.length?'':'<p class="report-loading">正在整理附件影像…</p>';if(issues.length){$('#reportRoot').dataset.ready='true';return;}
+    try{const html=await fullReport(snapshot,options);if(job!==reportGeneration||tab!=='reports'||snapshot.updatedAt!==project.updatedAt)return;resizeReports();$('#reportRoot').innerHTML=html;await document.fonts.ready;await Promise.all([...$('#reportRoot').querySelectorAll('img')].map(img=>img.decode()));if(job!==reportGeneration||tab!=='reports'||snapshot.updatedAt!==project.updatedAt)return;reportStale=false;resizeReports();$('#reportRoot').dataset.ready='true';}catch(e){if(job===reportGeneration&&tab==='reports'){$('#reportRoot').innerHTML='';notice(`附件預覽未完成：${e.message}`,true);}}
   })();return reportPromise;
 }
 function hasReadings(pair){return [pair.inPlane.A,pair.outPlane.A,pair.inPlane.B,pair.outPlane.B,pair.C].some(m=>JSON.stringify(m).match(/"(?:dxCm|upperCm|lowerCm|HD|VD|N|E|Z|hCm)":"[^"]+"/));}
-async function exportCase(){
-  clearTimeout(saveTimer);await queueSave();const origin=project,backupProject=structuredClone(project);backupProject.lastExportedAt=project.updatedAt;
+function shareSupported(){try{return typeof navigator.share==='function'&&!!navigator.canShare?.({files:[new File([''],'案件.tiltsurvey',{type:'application/json'})]});}catch{return false;}}
+function invalidateShare(){
+  const button=$('#shareCaseButton');if(preparedShare||button.textContent==='正在準備案件檔…')notice('案件已變更，請重新準備分享檔案。');
+  shareGeneration++;preparedShare=null;button.textContent='準備分享案件檔';button.disabled=sharing;
+}
+async function caseFile(){
+  const origin=project,backupProject=structuredClone(project);backupProject.lastExportedAt=backupProject.updatedAt;clearTimeout(saveTimer);await queueSave();
   const backup=await makeBackup(backupProject),blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
   if(blob.size>250*1024*1024)throw Error('案件檔超過 250 MB，請先另存照片原檔並減少本案件照片。');
-  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`傾斜測量_${(backupProject.header.caseNumber||'未命名').replace(/[<>:"/\\|?*]/g,'_')}_${new Date().toISOString().slice(0,10)}.tiltsurvey`;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
-  if(project===origin){project.lastExportedAt=backupProject.lastExportedAt;await queueSave();}notice('完整案件檔已交由瀏覽器下載，請確認檔案已保存。');
+  const name=`傾斜測量_${(backupProject.header.caseNumber||'未命名').replace(/[<>:"/\\|?*]/g,'_')}_${new Date().toISOString().slice(0,10)}.tiltsurvey`;
+  return {origin,updatedAt:backupProject.updatedAt,file:new File([blob],name,{type:blob.type})};
 }
-async function adopt(newProject,media=[]){clearTimeout(saveTimer);await saving;await replaceProject(newProject,media);project=newProject;reportKind='all';selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;failedSave=false;storageBlocked=false;reportStale=true;updateStatus();render();}
+async function markExported(data){if(project===data.origin&&project.updatedAt===data.updatedAt){project.lastExportedAt=data.updatedAt;await queueSave();}}
+async function exportCase(){const data=await caseFile();downloadBlob(data.file,data.file.name);await markExported(data);notice('完整案件檔已交由瀏覽器下載，請確認檔案已保存。');}
+async function prepareShare(){
+  const job=++shareGeneration,button=$('#shareCaseButton');preparedShare=null;button.disabled=true;button.textContent='正在準備案件檔…';
+  try{
+    const data=await caseFile();if(job!==shareGeneration||project!==data.origin||project.updatedAt!==data.updatedAt)return;
+    if(!navigator.canShare?.({files:[data.file]}))throw Error('此裝置無法分享案件檔，請使用匯出');
+    preparedShare=data;button.textContent='分享已準備的案件檔';notice('案件檔已準備，請再次點擊「分享已準備的案件檔」。');
+  }catch(e){if(job===shareGeneration)throw e;}
+  finally{if(job===shareGeneration){button.disabled=false;if(!preparedShare)button.textContent='準備分享案件檔';}}
+}
+async function shareCase(){
+  const data=preparedShare;if(sharing||!data)return;
+  if(project!==data.origin||project.updatedAt!==data.updatedAt){invalidateShare();return;}
+  const button=$('#shareCaseButton');sharing=true;button.disabled=true;
+  try{
+    // Invoke synchronously from the second click; all media work has finished.
+    await navigator.share({files:[data.file],title:'傾斜測量案件檔'});
+    await markExported(data);notice('完整案件檔已交由系統分享。');
+  }catch(e){if(e.name==='AbortError'){notice('已取消分享，匯出狀態未變更。');return;}throw e;}
+  finally{sharing=false;button.disabled=false;}
+}
+async function adopt(newProject,media=[]){invalidateShare();clearTimeout(saveTimer);await saving;await replaceProject(newProject,media);project=newProject;document.documentElement.dataset.saveState='saved';reportKind='all';selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;failedSave=false;storageBlocked=false;reportStale=true;updateStatus();render();}
 async function action(name){
   const pair=project.pairs.find(p=>p.id===selectedPair),facade=project.facades.find(f=>f.id===selectedFacade);
   if(name==='export')return exportCase();
+  if(name==='share')return preparedShare?shareCase():prepareShare();
+  if(name==='verify-file'){$('#verifyFile').click();return;}
   if(name==='import'){ $('#importFile').click();return; }
   if(name==='new'||name==='sample'){if(await allowReplace(name==='new'?'建立空白案件':'載入合成示例')){await adopt(name==='new'?createProject():sampleProject());notice(name==='new'?'空白案件已建立。':'合成示例已載入，可直接預覽成果表。');}return;}
   if(name==='tab-photos'||name==='tab-map'){tab=name==='tab-photos'?'photos':'map';render();return;}
@@ -163,10 +195,15 @@ document.addEventListener('change',async event=>{
     const path=e.dataset.field;
     if(path.endsWith('.mode')){
       const pair=project.pairs[+path.split('.')[1]];
-      if(hasReadings(pair)&&e.value!==pair.mode){const response=await dialog('切換作業方式','原讀數保留，成果只採用新選擇的方式。已確認的讀數須重新確認並填更正原因。',[['switch','切換並保留原讀數'],['cancel','取消']]);if(response.value!=='switch'){e.value=pair.mode;return;}}
+      if(hasReadings(pair)&&e.value!==get(path)){const response=await dialog('切換作業方式','原讀數保留，成果只採用新選擇的方式。已確認的讀數須重新確認並填更正原因。',[['switch','切換並保留原讀數'],['cancel','取消']]);if(response.value!=='switch'){e.value=get(path);return;}}
     }
-    set(path,e.type==='checkbox'?e.checked:e.value);changed();render();
+    set(path,e.type==='checkbox'?e.checked:e.value);if(/^pairs\.\d+\.mode$/.test(path)){const pair=project.pairs[+path.split('.')[1]];for(const axis of ['inPlane','outPlane'])pair[axis].mode='';}changed();render();
   }catch(error){notice(error.message,true);}
+});
+$('#shareCaseButton').hidden=!shareSupported();
+$('#verifyFile').addEventListener('change',async event=>{
+ const file=event.target.files[0];event.target.value='';if(!file)return;
+ try{if(file.size>250*1024*1024)throw Error('案件檔超過 250 MB');const result=await verifyFingerprint(parseBackup(await file.text()));notice(result.matches===null?`此舊案件檔未附指紋；計算 SHA-256：${result.actual}。目前案件未變更。`:result.matches?`案件檔指紋一致：${result.actual}。目前案件未變更。`:`案件檔指紋不一致：計算 ${result.actual}，檔載 ${result.expected}。目前案件未變更。`,result.matches===false);}catch(e){notice(`指紋驗證未完成：${e.message}。目前案件未變更。`,true);}
 });
 $('#importFile').addEventListener('change',async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;
@@ -180,4 +217,4 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register('./sw.js',{upda
 navigator.serviceWorker?.addEventListener('controllerchange',()=>{if(updateRequested&&!swReload){swReload=true;location.reload();return;}if(previousController){const button=$('#updateButton');button.hidden=false;button.onclick=async()=>{await queueSave();if(failedSave){notice('請先匯出案件備份，再重新載入新版。',true);return;}location.reload();};}previousController=navigator.serviceWorker.controller;});
 window.addEventListener('online',()=>{$('#offlineStatus').textContent='已連線';});window.addEventListener('offline',()=>{$('#offlineStatus').textContent='離線使用中';});
 try{const saved=await loadProject();project=saved?normalizeProject(saved):createProject();if(!saved)await saveProject(project);}catch(e){project=createProject();failedSave=true;storageBlocked=true;notice(`無法讀取本機案件：${e.message}。原本案件未覆寫；目前畫面不會自動保存，可先匯入備份或明確另建案件。`,true);}
-selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;updateStatus();render();
+selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;document.documentElement.dataset.saveState=failedSave?'failed':'saved';updateStatus();render();

@@ -1,3 +1,4 @@
+import {projectFingerprint,mediaIds,validateBackupMedia} from './integrity.js';
 // IndexedDB transaction / media backup core adapted from:
 // oxsum324/level-survey-recorder, store.js, commit 78f2ae02646510290854e89ff1ba901776bce9f5.
 // 複製後獨立演進。 Normalization, strict import checks, and completion handlers extended here.
@@ -26,10 +27,12 @@ export async function replaceProject(project,media=[]) {
 const object=(value)=>value&&typeof value==='object'&&!Array.isArray(value);
 function identifier(value){raw(value);if(!/^[A-Za-z0-9_-]{1,100}$/.test(value))throw Error('案件或媒體識別格式無效');return value;}
 function raw(value) { if(typeof value!=='string'||value.length>3000) throw Error('案件文字或原始讀數格式無效');return value; }
-function mergeMeasurement(value,axis) {
+function mergeMeasurement(value,axis,groupMode,legacyModes) {
   if(!object(value)) throw Error('測線資料結構不完整');
   const fallback=measurement(axis),m={...fallback,...value,A:{...fallback.A,...value.A},B:{...fallback.B,...value.B}};
   for(const mode of ['A','B']) {if(!Array.isArray(m[mode].rounds)||m[mode].rounds.length<1||m[mode].rounds.length>2)throw Error('測回數量無效');}
+  // Before V0.4, the group mode took precedence even over a stored direction mode.
+  m.mode=(legacyModes&&value.mode!==''||value.mode===undefined)?groupMode:value.mode;if(!['','A','B','C'].includes(m.mode))throw Error('方向作業方式無效');
   raw(m.A.hCm); raw(m.skipReason);
   if(!['measured','skipped'].includes(m.status))throw Error('施測狀態無效');
   if(!['front','rightSide','leftSide'].includes(m.B.station))throw Error('測站位置無效');
@@ -39,6 +42,7 @@ function mergeMeasurement(value,axis) {
 }
 export function normalizeProject(value) {
   if(!object(value)||value.schema!==1||!Array.isArray(value.facades)||!Array.isArray(value.pairs)||!value.facades.length||value.facades.length>100||value.pairs.length>200)throw Error('案件資料結構不完整或版本不支援');
+  const legacyModes=value.appVersion==null||value.appVersion===''||/^0\.[0-3](?:\.|$)/.test(value.appVersion);
   const fallback=createProject(),p={...fallback,...structuredClone(value),header:{...fallback.header,...value.header},settings:{...fallback.settings,...value.settings}};
   for(const v of Object.values(p.header))raw(v);
   for(const key of ['toleranceMm','minOffsetMm','minHeightCm'])raw(p.settings[key]);
@@ -61,7 +65,7 @@ export function normalizeProject(value) {
     if(!object(pair))throw Error('測點組無效');const d=createPair(pair.index,pair.facadeId),q={...d,...pair};
     identifier(q.id);if(!q.id||ids.has(q.id)||!Number.isInteger(q.index)||q.index<1||q.index>999||indexes.has(q.index)||!facadeIds.has(q.facadeId))throw Error('測點識別或立面引用無效');ids.add(q.id);indexes.add(q.index);
     q.mode ||= pair.inPlane?.mode||'A';if(!['A','B','C'].includes(q.mode)||!['left','right','custom'].includes(q.corner)||typeof q.sharedH!=='boolean')throw Error('測點組設定無效');
-    raw(q.note);raw(q.tbHeightCm);raw(q.cornerOffsetCm);q.inPlane=mergeMeasurement(q.inPlane,'inPlane');q.outPlane=mergeMeasurement(q.outPlane,'outPlane');
+    raw(q.note);raw(q.tbHeightCm);raw(q.cornerOffsetCm);q.inPlane=mergeMeasurement(q.inPlane,'inPlane',q.mode,legacyModes);q.outPlane=mergeMeasurement(q.outPlane,'outPlane',q.mode,legacyModes);
     if(!Array.isArray(q.C?.rounds)||q.C.rounds.length<1||q.C.rounds.length>2)throw Error('座標測回數無效');for(const r of q.C.rounds)for(const pos of ['tp','tb'])for(const key of ['N','E','Z'])raw(r?.[pos]?.[key]);
     if(!Array.isArray(q.photos)||q.photos.length>500)throw Error('照片參照無效');
     for(const photo of q.photos){if(!object(photo))throw Error('照片資料無效');identifier(photo.id);identifier(photo.mediaId);if(photoIds.has(photo.id))throw Error('照片識別重複');photoIds.add(photo.id);for(const key of ['fileName','description','stampDate','capturedAt','addedAt'])raw(photo[key]);if(!['exif','import'].includes(photo.capturedAtSource)||typeof photo.showStamp!=='boolean'||photo.stampDate.length>40||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(photo.capturedAt)||Number.isNaN(Date.parse(photo.addedAt)))throw Error('照片時間或來源無效');validateMarks(photo.marks);}
@@ -76,12 +80,11 @@ export function normalizeProject(value) {
   if(!p.map&&p.pairs.some(q=>q.mapMarker))throw Error('測點位置缺少對應底圖');
   p.appVersion=VERSION;return p;
 }
-function mediaIds(p){return [...new Set([p.map?.mediaId,...p.pairs.flatMap(pair=>pair.photos.map(photo=>photo.mediaId))].filter(Boolean))];}
 const blobAsDataUrl=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});
 export async function makeBackup(project,read=loadMedia,encode=blobAsDataUrl) {
   const p=normalizeProject(project),media=[];
   for(const id of mediaIds(p)) {const blob=await read(id);if(!blob)throw Error(`媒體 ${id} 缺漏，無法建立完整案件檔`);media.push({id,dataUrl:await encode(blob)});}
-  return {format:'tilt-survey-case.v1',exportedAt:new Date().toISOString(),project:p,media};
+  return {format:'tilt-survey-case.v1',exportedAt:new Date().toISOString(),project:p,media,integrity:{algorithm:'SHA-256',sha256:await projectFingerprint(p,read)}};
 }
 export function parseBackup(contents) {
   if(contents.length>250*1024*1024)throw Error('案件檔超過 250 MB');
@@ -93,6 +96,7 @@ export function parseBackup(contents) {
     let bytes;try{bytes=Uint8Array.from(atob(item.dataUrl.split(',')[1]),c=>c.charCodeAt(0));}catch{throw Error('案件影像編碼無效');}
     if(bytes.byteLength>60*1024*1024)throw Error('單張影像超過 60 MB');return {id:item.id,blob:new Blob([bytes],{type:item.dataUrl.split(';')[0].slice(5)})};
   });
-  for(const id of mediaIds(project))if(!ids.has(id))throw Error('案件缺少照片或底圖原檔');
-  return {project,media};
+  validateBackupMedia(project,media);
+  if(backup.integrity!==undefined&&(backup.integrity?.algorithm!=='SHA-256'||! /^[a-f0-9]{64}$/.test(backup.integrity.sha256)))throw Error('案件指紋格式無效');
+  return {project,media,integrity:backup.integrity||null};
 }

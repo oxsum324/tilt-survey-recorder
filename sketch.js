@@ -36,7 +36,7 @@ export function sketchGeometry(pair,facade,result,axis,settings={}) {
 export function sketch(pair,facade,result,axis,settings={}) {
   if(result.status!=='ok')return {svg:'',texts:[],geometry:null};
   const g=sketchGeometry(pair,facade,result,axis,settings),parts=[],texts=[];
-  const line=(x1,y1,x2,y2,w=.18,extra='')=>parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#111" stroke-width="${w}" ${extra}/>`);
+  const line=(x1,y1,x2,y2,w=.18,extra='',color='#111')=>parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${w}" ${extra}/>`);
   const text=(x,y,value,size=2.3,anchor='middle',rotate=false,bold=false)=>{
     const width=[...String(value)].reduce((sum,c)=>sum+(/[\u2e80-\uffff]/.test(c)?size:size*.56),0);
     const box=rotate?{x:x-size*.8,y:y-width/2,w:size,h:width}:{x:x-(anchor==='middle'?width/2:anchor==='end'?width:0),y:y-size*.82,w:width,h:size};
@@ -46,7 +46,7 @@ export function sketch(pair,facade,result,axis,settings={}) {
   const circle=(p)=>parts.push(`<circle cx="${p.x}" cy="${p.y}" r=".75" fill="#111"/>`);
   const tick=(x,y)=>line(x-.8,y+.8,x+.8,y-.8,.26);
   const dimension=(x,y1,y2,value)=>{line(x,y1,x,y2);tick(x,y1);tick(x,y2);text(x-1,(y1+y2)/2,value,2.3,'middle',true);};
-  const rect=(x,y,w,h,lw=.15)=>parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="#111" stroke-width="${lw}"/>`);
+  const rect=(x,y,w,h,lw=.15)=>parts.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="none" stroke="${lw===.15?'#444':'#111'}" stroke-width="${lw}"/>`);
   line(48,4,48,84,.1,'stroke-dasharray=".8 .8"');
   line(9,g.ground,46,g.ground,.45);for(let x=9;x<45;x+=1.5)line(x,g.ground+1.4,x+1.4,g.ground,.12);
   text(9,g.ground-1,'GL',1.9,'end');
@@ -59,8 +59,8 @@ export function sketch(pair,facade,result,axis,settings={}) {
       text(g.side?(g.left?g.x0-1:g.x1+1):(g.left?g.x1+1:g.x0-1),y+.6,i===g.parameters.floors.length-1?'RFL':`${i+2}FL`,1.9,g.side?(g.left?'end':'start'):(g.left?'start':'end'));
       if(!g.side&&facade.building.showOpenings&&i>0) {
         const lower=cumulative-h,windowHeight=Math.min(150,h*.45),sill=Math.min(90,h*.25),wy=g.floorY(lower+sill+windowHeight),wh=(windowHeight*g.scale);
-        rect(g.x0+(g.x1-g.x0)*.22,wy,(g.x1-g.x0)*.56,wh);line((g.x0+g.x1)/2,wy,(g.x0+g.x1)/2,wy+wh,.15);
-        line(g.x0+(g.x1-g.x0)*.2,wy+wh,g.x0+(g.x1-g.x0)*.8,wy+wh,.15);
+        rect(g.x0+(g.x1-g.x0)*.22,wy,(g.x1-g.x0)*.56,wh);line((g.x0+g.x1)/2,wy,(g.x0+g.x1)/2,wy+wh,.15,'','#444');
+        line(g.x0+(g.x1-g.x0)*.2,wy+wh,g.x0+(g.x1-g.x0)*.8,wy+wh,.15,'','#444');
       }
     }
   });
@@ -68,12 +68,13 @@ export function sketch(pair,facade,result,axis,settings={}) {
     const w=g.x1-g.x0,doorH=Math.min(250,g.parameters.floors[0]*.8)*g.scale,doorW=w*.18;
     rect(g.x0+w*.08,g.ground-doorH,doorW,doorH);
     const shop=facade.building.groundFloorType==='shop',h=shop?doorH:doorH*.5,top=g.ground-doorH;
-    rect(g.x0+w*.38,top,w*.52,h);if(shop)for(let y=top+1.4;y<g.ground;y+=1.4)line(g.x0+w*.38,y,g.x0+w*.9,y,.12);
+    rect(g.x0+w*.38,top,w*.52,h);if(shop)for(let y=top+1.4;y<g.ground;y+=1.4)line(g.x0+w*.38,y,g.x0+w*.9,y,.15,'','#444');
   }
   if(g.side) {
     const edge=g.left?g.x0:g.x1,mid=(g.roofY+g.ground)/2;
     parts.push(`<path d="M${edge} ${mid-3} l1.5 1.5 l-3 1.5 l1.5 1.5" fill="white" stroke="#111" stroke-width=".3"/>`);
-    text((g.x0+g.x1)/2,g.roofY-2,g.left?'後 ← 前':'前 → 後',2.1);
+    text(g.left?g.x1:g.x0,g.roofY-2,'前（臨路側）',1.8,g.left?'end':'start');
+    text(g.left?g.x0:g.x1,g.roofY-2,'後',1.8,g.left?'start':'end');
   }
   if(g.compressed) {
     for(const [a,b]of g.omitted.filter((v,i,all)=>i===0||all[i-1][1]!==v[0])) {
