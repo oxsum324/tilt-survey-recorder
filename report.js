@@ -3,7 +3,8 @@ import {labels,isConfirmed,modeFor} from './model.js';
 import {sketch,buildingParameters,escapeXml as esc} from './sketch.js';
 export function bearingText(value){
   if(value===null)return '方位未定義';
-  const a=(value%360+360)%360,cardinal={0:'正北',90:'正東',180:'正南',270:'正西'};
+  const wrapped=value%360,normalized=wrapped<0?wrapped+360:wrapped;
+  const a=(Math.round(normalized*10)%3600)/10,cardinal={0:'正北',90:'正東',180:'正南',270:'正西'};
   const direction=cardinal[a]||(a<90?`北偏東 ${a.toFixed(1)}°`:a<180?`南偏東 ${(180-a).toFixed(1)}°`:a<270?`南偏西 ${(a-180).toFixed(1)}°`:`北偏西 ${(360-a).toFixed(1)}°`);
   return `${direction}（方位角 ${a.toFixed(1)}°）`;
 }

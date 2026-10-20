@@ -19,3 +19,14 @@ test('合成方位包含四象限及四個正方向',async()=>{
 test('成果表的門窗使用深灰細線且側立面標示臨路側',()=>{
  const p=sampleProject(),html=reportDocument(p);assert.match(html,/stroke="#444" stroke-width="0.15"/);assert.match(html,/前（臨路側）/);
 });
+test('方位先捨入再判定正方向，四邊界與跨圈不產生矛盾文字',async()=>{
+ const {bearingText}=await import('./report.js');
+ for(const [a,direction]of [[359.99,'正北'],[-.01,'正北'],[360,'正北'],[720,'正北'],[89.99,'正東'],[179.99,'正南'],[269.99,'正西']]){
+  const rounded=(Math.round(((a%360+360)%360)*10)%3600)/10;assert.equal(bearingText(a),`${direction}（方位角 ${rounded.toFixed(1)}°）`);
+ }
+ for(const [a,text]of [[.06,'北偏東 0.1°（方位角 0.1°）'],[89.94,'北偏東 89.9°（方位角 89.9°）'],[90.06,'南偏東 89.9°（方位角 90.1°）'],[179.94,'南偏東 0.1°（方位角 179.9°）'],[180.06,'南偏西 0.1°（方位角 180.1°）'],[269.94,'南偏西 89.9°（方位角 269.9°）'],[270.06,'北偏西 89.9°（方位角 270.1°）'],[359.94,'北偏西 0.1°（方位角 359.9°）'],[-.06,'北偏西 0.1°（方位角 359.9°）']])assert.equal(bearingText(a),text);
+ for(const a of [0,90,180,270])for(const delta of [-.049,0,.049])assert.match(bearingText(a+delta),/正[北東南西]（/);
+ for(const a of [0,90,180,270])assert.equal(bearingText(a-.05),bearingText(a));
+ for(const [a,text]of [[.05,'北偏東 0.1°（方位角 0.1°）'],[90.05,'南偏東 89.9°（方位角 90.1°）'],[180.05,'南偏西 0.1°（方位角 180.1°）'],[270.05,'北偏西 89.9°（方位角 270.1°）']])assert.equal(bearingText(a),text);
+ for(let tenths=0;tenths<3600;tenths++)assert.doesNotMatch(bearingText(tenths/10+.049),/方位角 360\.0|偏[東西] 0\.0|偏[東西] 90\.0/);
+});
