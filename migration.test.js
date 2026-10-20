@@ -27,3 +27,22 @@ test('單向 C 共用座標，另一向保留 A，預設沿用測點組',()=>{
  const p=sampleProject(),pair=p.pairs[0],f=p.facades[0];f.baseline={...f.baseline,method:'azimuth',azimuthDeg:'90'};pair.outPlane.mode='C';pair.C.rounds=[{tp:{N:'100.029',E:'200.023',Z:'14.865'},tb:{N:'100.000',E:'200.000',Z:'10.000'}}];const r=calculatePair(pair,f);assert.equal(r.inPlane.denominator,212);assert.equal(r.outPlane.denominator,168);assert.match(rawReport(p),/北偏東 38.4°/);const inherited=createPair(1,f.id,'B');assert.equal(inherited.inPlane.mode,'');assert.equal(inherited.outPlane.mode,'');
 });
 test('無效方向方式拒絕，改預設但實際方向不變不影響讀數確認',()=>{const p=sampleProject(),pair=p.pairs[0];pair.inPlane.mode='A';pair.outPlane.mode='A';const before=observationSnapshot(pair,p.facades[0]);pair.mode='C';assert.equal(observationSnapshot(pair,p.facades[0]),before);pair.outPlane.mode='invalid';assert.throws(()=>normalizeProject(p),/方向作業方式/);});
+
+for(const [version,ref]of [['0.1.0','b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc'],['0.3.0','3f83c6deba226c7473974055ebcf6f7de0363b76']])test(`V${version} 殘留方向方式不取代組設定，所有成果與確認沿用舊引擎`,async()=>{
+ const old=await load(ref,'model.js'),calc=await load(ref,'calc.js'),receipt=[];
+ for(const group of ['A','B','C'])for(const stale of ['','A','B','C','invalid']){
+  const p=old.sampleProject(),pair=p.pairs[0],f=p.facades[0];p.pairs=[pair];pair.mode=group;f.baseline.method='azimuth';f.baseline.azimuthDeg='90';
+  pair.inPlane.mode=stale;pair.outPlane.mode=stale;
+  pair.inPlane.B.rounds=[{tp:{HD:'8.100',VD:'6.215'},tb:{HD:'8.146',VD:'1.350'}}];pair.outPlane.B.rounds=[{tp:{HD:'12.374',VD:'6.215'},tb:{HD:'12.345',VD:'1.350'}}];
+  pair.C.rounds=[{tp:{N:'100.029',E:'200.023',Z:'14.865'},tb:{N:'100.000',E:'200.000',Z:'10.000'}}];pair.confirmed=null;old.confirmObservation(p,pair,f);
+  const before=calc.calculatePair(pair,f,p.settings),q=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]})).project,after=calculatePair(q.pairs[0],q.facades[0],q.settings);
+  assert.deepEqual(after,before);assert.equal(isConfirmed(q.pairs[0],q.facades[0]),true);assert.deepEqual(q.pairs[0].confirmed,pair.confirmed);
+  for(const axis of ['inPlane','outPlane']){assert.equal(q.pairs[0][axis].mode,group);assert.deepEqual(q.pairs[0][axis].A,pair[axis].A);assert.deepEqual(q.pairs[0][axis].B,pair[axis].B);}
+  assert.deepEqual(parseBackup(JSON.stringify(await makeBackup(q))).project,q);receipt.push({group,stale,before,after,confirmed:true});
+ }
+ await fs.mkdir('output/migration',{recursive:true});await fs.writeFile(`output/migration/v${version}-stale-modes.json`,JSON.stringify({version,ref,cases:receipt.length,directions:receipt.length*2,receipt},null,2));
+});
+test('無版本舊檔沿用組設定，當版混合與沿用設定往返不變',async()=>{
+ const legacy=sampleProject();delete legacy.appVersion;legacy.pairs[0].inPlane.mode='B';assert.equal(normalizeProject(legacy).pairs[0].inPlane.mode,'A');
+ for(const mode of ['','A','B','C']){const p=sampleProject();p.pairs[0].inPlane.mode=mode;p.pairs[0].outPlane.mode='B';const q=parseBackup(JSON.stringify(await makeBackup(p))).project;assert.equal(q.pairs[0].inPlane.mode,mode);assert.equal(q.pairs[0].outPlane.mode,'B');}
+});
