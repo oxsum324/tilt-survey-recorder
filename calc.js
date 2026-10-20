@@ -76,7 +76,7 @@ export function calculateDirection(pair,axis,facade={},settings={}) {
       if(!m.skipReason?.trim()) throw Error('未施測須填原因');
       return {status:'skipped',reason:m.skipReason,warnings:[]};
     }
-    const mode=pair.mode||m.mode,ds=[],hs=[];
+    const mode=m.mode||pair.mode,ds=[],hs=[];
     const rounds=mode==='C'?pair.C?.rounds:m[mode]?.rounds;
     if(!Array.isArray(rounds)||rounds.length<1||rounds.length>2) throw Error('每方向須有 1 至 2 測回');
     let composite=null;

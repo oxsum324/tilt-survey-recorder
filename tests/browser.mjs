@@ -1,3 +1,4 @@
+import {VERSION} from '../model.js';
 import {poll,reportReady} from './poll.mjs';
 import {chromium} from 'playwright';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import {fileURLToPath} from 'node:url';import {startServer} from '../serve.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),output=path.join(root,'output','playwright');await fs.mkdir(output,{recursive:true});
@@ -13,7 +14,7 @@ const confirmDialog=text=>page.locator('#actionDialog').getByRole('button',{name
 async function enter(values){for(const [key,value]of Object.entries(values))await field(key).fill(value);}
 async function preview(){await tab('reports');await reportReady(page);await page.locator('.result-sheet').first().waitFor();}
 try {
-  await page.goto(base+'/?release=0.3.0');await field('header.orgName').waitFor();
+  await page.goto(base+`/?release=${VERSION}`);await field('header.orgName').waitFor();
   await enter({'header.orgName':'合成測量示例','header.caseNumber':'合成示例 A','header.householdNo':'01','header.address':'非真實地址（測試）','header.surveyDate':'115年09月30日','header.surveyor':'合成示例','header.instrument':'示例儀器'});
   await tab('readings');await enter({'pairs.0.inPlane.A.hCm':'486.5','pairs.0.inPlane.A.rounds.0.dxCm':'2.3','pairs.0.outPlane.A.rounds.0.dxCm':'2.9','pairs.0.tbHeightCm':'395'});
   await poll(page,async()=>assert.match(await page.locator('#liveResults').innerText(),/1／212/));await poll(page,async()=>assert.match(await page.locator('#liveResults').innerText(),/1／168/));await action('confirm');await preview();await poll(page,async()=>assert.equal(await page.locator('.result-sheet').count(),1));await poll(page,async()=>assert.match(await page.locator('#reportRoot').innerText(),/1／212/));pass('建案 → 模式 A → 確認 → 範本數值預覽');
@@ -40,7 +41,7 @@ try {
   await page.locator('#importFile').setInputFiles(backup);await confirmDialog('直接取代');await preview();await poll(page,async()=>assert.equal(await page.locator('.result-sheet').count(),2));pass('完整案件檔下載／再匯入，原始字串與成果一致');
   await page.reload();await page.locator('[data-tab="readings"]').waitFor();await tab('readings');await poll(page,async()=>assert.equal(await page.locator('.pair-list button[data-pair]').count(),4));pass('IndexedDB 本機保存，重新整理後 4 組資料仍存在');
   await page.evaluate(async()=>{await navigator.serviceWorker.ready; if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));});
-  await context.setOffline(true);await page.goto(base+'/?release=0.3.0&offline-test=1');await tab('readings');await poll(page,async()=>assert.equal(await page.locator('.pair-list button[data-pair]').count(),4));await preview();await poll(page,async()=>assert.equal(await page.locator('.result-sheet').count(),2));await context.setOffline(false);pass('離線以含 query 的網址重開，案件與成果仍可讀取');
+  await context.setOffline(true);await page.goto(base+`/?release=${VERSION}&offline-test=1`);await tab('readings');await poll(page,async()=>assert.equal(await page.locator('.pair-list button[data-pair]').count(),4));await preview();await poll(page,async()=>assert.equal(await page.locator('.result-sheet').count(),2));await context.setOffline(false);pass('離線以含 query 的網址重開，案件與成果仍可讀取');
   await poll(page,async()=>assert.deepEqual(errors,[]));pass('全流程無瀏覽器執行錯誤');
   await fs.writeFile(path.join(output,'browser-results.json'),JSON.stringify({base,checks,errors,total:checks.length,passed:checks.length},null,2));
 }finally{await context.close();await browser.close();if(server)await new Promise(resolve=>server.close(resolve));}

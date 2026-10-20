@@ -1,8 +1,10 @@
-# 傾斜測量紀錄 V0.3.0
+# 傾斜測量紀錄 V0.4.0
 
 現場功能測試版。純前端 ES modules，無建置工具、無後端，案件、讀數、原始照片與底圖只存在本機瀏覽器。
 
-- [開啟測試工具](https://oxsum324.github.io/tilt-survey-recorder/?release=0.3.0)
+- [合併發布後的測試網址](https://oxsum324.github.io/tilt-survey-recorder/?release=0.4.0)
+- 本版以 PR 交付，尚未合併 main；網址版本參數本身不會部署新版。
+- [V0.4.0 交付說明](docs/versions/v0.4.0.md)
 - [V0.3.0 交付與測試](docs/versions/v0.3.0.md)
 - [第一期交付紀錄](docs/versions/v0.1.0.md)
 - [規格檢視與後續精進](docs/review-and-next.md)
@@ -74,3 +76,13 @@ html2pdf 的本機程式與授權檔位於 `vendor/`，取自上述水準測量�
 排除欄位：appVersion、createdAt、updatedAt、lastExportedAt、nextPairIndex、settings.defaultMode。這些欄位記錄軟體版本、保存／匯出時間及新增預設，不改變既有量測內容。瀏覽器的強光、常亮與目前分頁偏好不屬於案件資料。
 
 「驗證案件檔指紋」只在記憶體計算，不匯入、不覆蓋目前案件；舊檔未附指紋時只能計算，無法聲稱一致。指紋用於比對內容，並非身分簽章或第三方認證。支援檔案分享的裝置會顯示「分享案件檔」，取消分享不更新匯出時間。
+
+## 分方向作業方式與舊案件
+
+每個方向的 mode 可為 A／B／C，空字串表示沿用測點組預設。切換測點組預設會讓兩方向重新沿用；可再對單一方向選取其他方式，所有替代讀數均保留。任一方向採 C 時只輸入一組共用座標；A 的共用垂距不會代替 B／C 由讀數計算的垂距。
+
+schema 維持 1。讀取舊案件時，缺少方向 mode 的欄位承接原測點組設定；原確認快照不改寫，更正仍須填原因。
+
+## 發布清單與私人字串
+
+只發布 build-site.mjs 明列的檔案。private-denylist.txt 為本機忽略檔，每行一個私人字串；可參考 private-denylist.example.txt 的示例格式。CI 由使用者設定 TILT_PRIVATE_DENYLIST secret（換行分隔）；兩個來源合併檢查，均未提供時會警告並僅套用通用路徑規則。這次只清理新 HEAD，既有公開 Git 歷史未改寫。

@@ -1,7 +1,7 @@
-export const VERSION='0.3.0';
+export const VERSION='0.4.0';
 export const id=()=>crypto.randomUUID();
 const point=()=>({N:'',E:'',Z:''});
-export function measurement(axis) { return {status:'measured',skipReason:'',A:{rounds:[{source:'offset',dxCm:'',upperCm:'',lowerCm:'',dir:axis==='inPlane'?'right':'back'}],hCm:''},B:{station:axis==='inPlane'?'rightSide':'front',rounds:[{tp:{HD:'',VD:''},tb:{HD:'',VD:''}}]},firstEnteredAt:null}; }
+export function measurement(axis) { return {mode:'',status:'measured',skipReason:'',A:{rounds:[{source:'offset',dxCm:'',upperCm:'',lowerCm:'',dir:axis==='inPlane'?'right':'back'}],hCm:''},B:{station:axis==='inPlane'?'rightSide':'front',rounds:[{tp:{HD:'',VD:''},tb:{HD:'',VD:''}}]},firstEnteredAt:null}; }
 export function createFacade(name='立面 1') { return {id:id(),name,facingDeg:'',baseline:{method:'none',A:{N:'',E:''},B:{N:'',E:''},azimuthDeg:''},building:{floorHeightsCm:['360','320','320','320'],parapetCm:'110',widthCm:'450',sideShownCm:'500',groundFloorType:'shop',showOpenings:true}}; }
 export function createPair(index,facadeId,mode='A') { return {id:id(),index,facadeId,mode,corner:'right',cornerOffsetCm:'',tbHeightCm:'',note:'',sharedH:true,inPlane:measurement('inPlane'),outPlane:measurement('outPlane'),C:{rounds:[{tp:point(),tb:point()}]},photos:[],mapMarker:null,confirmed:null}; }
 export function createProject() {
@@ -13,13 +13,15 @@ export function createProject() {
 }
 export function labels(pair,settings) {return {inPlane:`T${pair.index}`,outPlane:settings.labelStyle==='TS'?`S${pair.index}`:`T${pair.index}′`,tp:`TP${pair.index}`,tb:`TB${pair.index}`};}
 function stable(value) { if(Array.isArray(value))return value.map(stable);if(value&&typeof value==='object')return Object.fromEntries(Object.keys(value).sort().map(key=>[key,stable(value[key])]));return value; }
+export const modeFor=(pair,axis)=>pair[axis].mode||pair.mode;
 export function observationSnapshot(pair,facade) {
+  const modes={inPlane:modeFor(pair,'inPlane'),outPlane:modeFor(pair,'outPlane')},same=modes.inPlane===modes.outPlane,hasA=Object.values(modes).includes('A'),hasC=Object.values(modes).includes('C');
   // Only adopted data are included. Alternative modes remain intact but inactive.
-  return JSON.stringify(stable({mode:pair.mode,sharedH:pair.mode==='A'?pair.sharedH:undefined,
-    sharedHeight:pair.mode==='A'&&pair.sharedH?pair.inPlane.A.hCm:undefined,
-    inPlane:pair.inPlane.status==='skipped'?{status:'skipped',reason:pair.inPlane.skipReason}:{status:'measured',data:adopted(pair.inPlane,pair.mode)},
-    outPlane:pair.outPlane.status==='skipped'?{status:'skipped',reason:pair.outPlane.skipReason}:{status:'measured',data:adopted(pair.outPlane,pair.mode)},
-    C:pair.mode==='C'?{rounds:pair.C.rounds}:undefined,baseline:pair.mode==='C'?facade.baseline:undefined}));
+  return JSON.stringify(stable({mode:same?modes.inPlane:modes,sharedH:hasA?pair.sharedH:undefined,
+    sharedHeight:hasA&&pair.sharedH?pair.inPlane.A.hCm:undefined,
+    inPlane:pair.inPlane.status==='skipped'?{status:'skipped',reason:pair.inPlane.skipReason}:{status:'measured',data:adopted(pair.inPlane,modes.inPlane)},
+    outPlane:pair.outPlane.status==='skipped'?{status:'skipped',reason:pair.outPlane.skipReason}:{status:'measured',data:adopted(pair.outPlane,modes.outPlane)},
+    C:hasC?{rounds:pair.C.rounds}:undefined,baseline:hasC?facade.baseline:undefined}));
 }
 function adopted(m,mode){return mode==='C'?undefined:mode==='A'?{hCm:m.A.hCm,rounds:m.A.rounds}:{station:m.B.station,rounds:m.B.rounds};}
 export function isConfirmed(pair,facade) {return pair.confirmed?.snapshot===observationSnapshot(pair,facade);}
