@@ -66,3 +66,11 @@ html2pdf 的本機程式與授權檔位於 `vendor/`，取自上述水準測量�
 - 架構與 IndexedDB／離線核心：[level-survey-recorder](https://github.com/oxsum324/level-survey-recorder/tree/78f2ae02646510290854e89ff1ba901776bce9f5)，實際 main HEAD `78f2ae02646510290854e89ff1ba901776bce9f5`（V0.6.3）。複製／改寫範圍見 store.js、sw.js 檔頭，複製後獨立演進。
 - 照片圈註來源：[section-properties-calculator](https://github.com/oxsum324/section-properties-calculator/tree/2bd935b31e0421743a982c80c7f27fcc0e40d2bc)，實際 master HEAD `2bd935b31e0421743a982c80c7f27fcc0e40d2bc`。annotation.js 最後異動 `641e627d731122d7451aaf1b349e761928efcb6e`；V0.3.0 複製圈註核心並新增 callout，未複製 planar annotation 功能。
 - Pages 發布設定依 [GitHub 官方工作流程文件](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)。
+
+## 案件資料指紋與分享
+
+案件檔附 SHA-256，鍵值排序後計算，包含原始讀數、確認／更正紀錄、照片標註、佈設位置及每個引用媒體原檔的 SHA-256。成果表與原始讀數表頁尾列前 16 碼，附件末頁列完整 64 碼。
+
+排除欄位：appVersion、createdAt、updatedAt、lastExportedAt、nextPairIndex、settings.defaultMode。這些欄位記錄軟體版本、保存／匯出時間及新增預設，不改變既有量測內容。瀏覽器的強光、常亮與目前分頁偏好不屬於案件資料。
+
+「驗證案件檔指紋」只在記憶體計算，不匯入、不覆蓋目前案件；舊檔未附指紋時只能計算，無法聲稱一致。指紋用於比對內容，並非身分簽章或第三方認證。支援檔案分享的裝置會顯示「分享案件檔」，取消分享不更新匯出時間。

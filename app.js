@@ -1,3 +1,4 @@
+import {verifyFingerprint} from './integrity.js';
 import {VERSION,createProject,createFacade,createPair,measurement,labels,isConfirmed,confirmObservation,sampleProject} from './model.js';
 import {calculatePair} from './calc.js';
 import {normalizeProject,loadProject,saveProject,replaceProject,makeBackup,parseBackup} from './store.js';
@@ -93,17 +94,22 @@ function buildReport(){
   })();return reportPromise;
 }
 function hasReadings(pair){return [pair.inPlane.A,pair.outPlane.A,pair.inPlane.B,pair.outPlane.B,pair.C].some(m=>JSON.stringify(m).match(/"(?:dxCm|upperCm|lowerCm|HD|VD|N|E|Z|hCm)":"[^"]+"/));}
-async function exportCase(){
+function shareSupported(){try{return !!navigator.canShare?.({files:[new File([''],'案件.tiltsurvey',{type:'application/json'})]});}catch{return false;}}
+async function exportCase(share=false){
   clearTimeout(saveTimer);await queueSave();const origin=project,backupProject=structuredClone(project);backupProject.lastExportedAt=project.updatedAt;
   const backup=await makeBackup(backupProject),blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
   if(blob.size>250*1024*1024)throw Error('案件檔超過 250 MB，請先另存照片原檔並減少本案件照片。');
-  const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`傾斜測量_${(backupProject.header.caseNumber||'未命名').replace(/[<>:"/\\|?*]/g,'_')}_${new Date().toISOString().slice(0,10)}.tiltsurvey`;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);
-  if(project===origin){project.lastExportedAt=backupProject.lastExportedAt;await queueSave();}notice('完整案件檔已交由瀏覽器下載，請確認檔案已保存。');
+  const name=`傾斜測量_${(backupProject.header.caseNumber||'未命名').replace(/[<>:"/\\|?*]/g,'_')}_${new Date().toISOString().slice(0,10)}.tiltsurvey`;
+  if(share){const file=new File([blob],name,{type:blob.type});if(!navigator.canShare?.({files:[file]}))throw Error('此裝置無法分享案件檔，請使用匯出');try{await navigator.share({files:[file],title:'傾斜測量案件檔'});}catch(e){if(e.name==='AbortError'){notice('已取消分享，匯出狀態未變更。');return;}throw e;}}
+  else downloadBlob(blob,name);
+  if(project===origin){project.lastExportedAt=backupProject.lastExportedAt;await queueSave();}notice(share?'完整案件檔已交由系統分享。':'完整案件檔已交由瀏覽器下載，請確認檔案已保存。');
 }
-async function adopt(newProject,media=[]){clearTimeout(saveTimer);await saving;await replaceProject(newProject,media);project=newProject;reportKind='all';selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;failedSave=false;storageBlocked=false;reportStale=true;updateStatus();render();}
+async function adopt(newProject,media=[]){clearTimeout(saveTimer);await saving;await replaceProject(newProject,media);project=newProject;document.documentElement.dataset.saveState='saved';reportKind='all';selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;failedSave=false;storageBlocked=false;reportStale=true;updateStatus();render();}
 async function action(name){
   const pair=project.pairs.find(p=>p.id===selectedPair),facade=project.facades.find(f=>f.id===selectedFacade);
   if(name==='export')return exportCase();
+  if(name==='share')return exportCase(true);
+  if(name==='verify-file'){$('#verifyFile').click();return;}
   if(name==='import'){ $('#importFile').click();return; }
   if(name==='new'||name==='sample'){if(await allowReplace(name==='new'?'建立空白案件':'載入合成示例')){await adopt(name==='new'?createProject():sampleProject());notice(name==='new'?'空白案件已建立。':'合成示例已載入，可直接預覽成果表。');}return;}
   if(name==='tab-photos'||name==='tab-map'){tab=name==='tab-photos'?'photos':'map';render();return;}
@@ -169,6 +175,11 @@ document.addEventListener('change',async event=>{
     set(path,e.type==='checkbox'?e.checked:e.value);changed();render();
   }catch(error){notice(error.message,true);}
 });
+$('#shareCaseButton').hidden=!shareSupported();
+$('#verifyFile').addEventListener('change',async event=>{
+ const file=event.target.files[0];event.target.value='';if(!file)return;
+ try{if(file.size>250*1024*1024)throw Error('案件檔超過 250 MB');const result=await verifyFingerprint(parseBackup(await file.text()));notice(result.matches===null?`此舊案件檔未附指紋；計算 SHA-256：${result.actual}。目前案件未變更。`:result.matches?`案件檔指紋一致：${result.actual}。目前案件未變更。`:`案件檔指紋不一致：計算 ${result.actual}，檔載 ${result.expected}。目前案件未變更。`,result.matches===false);}catch(e){notice(`指紋驗證未完成：${e.message}。目前案件未變更。`,true);}
+});
 $('#importFile').addEventListener('change',async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;
   try{if(file.size>250*1024*1024)throw Error('案件檔超過 250 MB');const backup=parseBackup(await file.text());if(await allowReplace('匯入案件檔')){await adopt(backup.project,backup.media);notice('案件檔已匯入。');}}catch(e){notice(`匯入未完成：${e.message}`,true);}
@@ -181,4 +192,4 @@ if('serviceWorker'in navigator){navigator.serviceWorker.register('./sw.js',{upda
 navigator.serviceWorker?.addEventListener('controllerchange',()=>{if(updateRequested&&!swReload){swReload=true;location.reload();return;}if(previousController){const button=$('#updateButton');button.hidden=false;button.onclick=async()=>{await queueSave();if(failedSave){notice('請先匯出案件備份，再重新載入新版。',true);return;}location.reload();};}previousController=navigator.serviceWorker.controller;});
 window.addEventListener('online',()=>{$('#offlineStatus').textContent='已連線';});window.addEventListener('offline',()=>{$('#offlineStatus').textContent='離線使用中';});
 try{const saved=await loadProject();project=saved?normalizeProject(saved):createProject();if(!saved)await saveProject(project);}catch(e){project=createProject();failedSave=true;storageBlocked=true;notice(`無法讀取本機案件：${e.message}。原本案件未覆寫；目前畫面不會自動保存，可先匯入備份或明確另建案件。`,true);}
-selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;updateStatus();render();
+selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;document.documentElement.dataset.saveState=failedSave?'failed':'saved';updateStatus();render();
