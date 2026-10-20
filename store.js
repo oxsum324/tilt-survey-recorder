@@ -32,7 +32,7 @@ function mergeMeasurement(value,axis,groupMode,legacyModes) {
   const fallback=measurement(axis),m={...fallback,...value,A:{...fallback.A,...value.A},B:{...fallback.B,...value.B}};
   for(const mode of ['A','B']) {if(!Array.isArray(m[mode].rounds)||m[mode].rounds.length<1||m[mode].rounds.length>2)throw Error('測回數量無效');}
   // Before V0.4, the group mode took precedence even over a stored direction mode.
-  m.mode=legacyModes||value.mode===undefined?groupMode:value.mode;if(!['','A','B','C'].includes(m.mode))throw Error('方向作業方式無效');
+  m.mode=(legacyModes&&value.mode!==''||value.mode===undefined)?groupMode:value.mode;if(!['','A','B','C'].includes(m.mode))throw Error('方向作業方式無效');
   raw(m.A.hCm); raw(m.skipReason);
   if(!['measured','skipped'].includes(m.status))throw Error('施測狀態無效');
   if(!['front','rightSide','leftSide'].includes(m.B.station))throw Error('測站位置無效');

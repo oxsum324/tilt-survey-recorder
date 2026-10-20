@@ -37,7 +37,7 @@ for(const [version,ref]of [['0.1.0','b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc'],
   pair.C.rounds=[{tp:{N:'100.029',E:'200.023',Z:'14.865'},tb:{N:'100.000',E:'200.000',Z:'10.000'}}];pair.confirmed=null;old.confirmObservation(p,pair,f);
   const before=calc.calculatePair(pair,f,p.settings),q=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]})).project,after=calculatePair(q.pairs[0],q.facades[0],q.settings);
   assert.deepEqual(after,before);assert.equal(isConfirmed(q.pairs[0],q.facades[0]),true);assert.deepEqual(q.pairs[0].confirmed,pair.confirmed);
-  for(const axis of ['inPlane','outPlane']){assert.equal(q.pairs[0][axis].mode,group);assert.deepEqual(q.pairs[0][axis].A,pair[axis].A);assert.deepEqual(q.pairs[0][axis].B,pair[axis].B);}
+  for(const axis of ['inPlane','outPlane']){assert.equal(q.pairs[0][axis].mode,stale===''?'':group);assert.equal(q.pairs[0][axis].mode||q.pairs[0].mode,group);assert.deepEqual(q.pairs[0][axis].A,pair[axis].A);assert.deepEqual(q.pairs[0][axis].B,pair[axis].B);}
   assert.deepEqual(parseBackup(JSON.stringify(await makeBackup(q))).project,q);receipt.push({group,stale,before,after,confirmed:true});
  }
  await fs.mkdir('output/migration',{recursive:true});await fs.writeFile(`output/migration/v${version}-stale-modes.json`,JSON.stringify({version,ref,cases:receipt.length,directions:receipt.length*2,receipt},null,2));
