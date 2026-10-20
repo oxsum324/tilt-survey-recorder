@@ -9,6 +9,7 @@ import {setupDisplay} from './display.js';
 import {imagePdf} from './pdf.js';
 import {downloadBlob} from './media.js';
 let project,tab='case',selectedPair,selectedFacade,includeRaw=true,includePhotos=true,includeMap=true,reportKind='all',reportPromise=Promise.resolve(),reportGeneration=0,saveTimer,saving=Promise.resolve(),failedSave=false,storageBlocked=false,reportStale=true;
+let preparedShare=null,shareGeneration=0,sharing=false;
 const $=selector=>document.querySelector(selector),workspace=$('#workspace');
 const option=(value,text,current)=>`<option value="${value}"${value===current?' selected':''}>${text}</option>`;
 function input(label,path,value,{unit='',signed=false,placeholder='',type='text',numeric=true}={}) {
@@ -25,7 +26,7 @@ function updateStatus(){
   $('#saveStatus').className=failedSave?'status-error':unexported?'status-pending':'status-saved';
 }
 function queueSave(){clearTimeout(saveTimer);if(storageBlocked)return Promise.resolve();const snapshot=structuredClone(project);saving=saving.catch(()=>{}).then(()=>saveProject(snapshot)).then(()=>{failedSave=false;if(snapshot.updatedAt===project.updatedAt)document.documentElement.dataset.saveState='saved';updateStatus();}).catch(e=>{failedSave=true;updateStatus();notice(`本機保存未完成：${e.message}。目前畫面資料仍可匯出。`,true);});return saving;}
-function changed(){document.documentElement.dataset.saveState='pending';project.updatedAt=new Date(Math.max(Date.now(),Date.parse(project.updatedAt)+1)).toISOString();reportStale=true;updateStatus();clearTimeout(saveTimer);saveTimer=setTimeout(queueSave,200);}
+function changed(){invalidateShare();document.documentElement.dataset.saveState='pending';project.updatedAt=new Date(Math.max(Date.now(),Date.parse(project.updatedAt)+1)).toISOString();reportStale=true;updateStatus();clearTimeout(saveTimer);saveTimer=setTimeout(queueSave,200);}
 function dialog(title,text,buttons,{reason=false}={}) {
   const d=$('#actionDialog');$('#dialogTitle').textContent=title;$('#dialogText').textContent=text;$('#reasonLabel').hidden=!reason;$('#dialogReason').value='';
   $('#dialogButtons').innerHTML=buttons.map(([value,label])=>`<button value="${value}"${value==='cancel'?'':' class="primary"'}>${label}</button>`).join('');
@@ -94,21 +95,45 @@ function buildReport(){
   })();return reportPromise;
 }
 function hasReadings(pair){return [pair.inPlane.A,pair.outPlane.A,pair.inPlane.B,pair.outPlane.B,pair.C].some(m=>JSON.stringify(m).match(/"(?:dxCm|upperCm|lowerCm|HD|VD|N|E|Z|hCm)":"[^"]+"/));}
-function shareSupported(){try{return !!navigator.canShare?.({files:[new File([''],'案件.tiltsurvey',{type:'application/json'})]});}catch{return false;}}
-async function exportCase(share=false){
-  clearTimeout(saveTimer);await queueSave();const origin=project,backupProject=structuredClone(project);backupProject.lastExportedAt=project.updatedAt;
+function shareSupported(){try{return typeof navigator.share==='function'&&!!navigator.canShare?.({files:[new File([''],'案件.tiltsurvey',{type:'application/json'})]});}catch{return false;}}
+function invalidateShare(){
+  const button=$('#shareCaseButton');if(preparedShare||button.textContent==='正在準備案件檔…')notice('案件已變更，請重新準備分享檔案。');
+  shareGeneration++;preparedShare=null;button.textContent='準備分享案件檔';button.disabled=sharing;
+}
+async function caseFile(){
+  const origin=project,backupProject=structuredClone(project);backupProject.lastExportedAt=backupProject.updatedAt;clearTimeout(saveTimer);await queueSave();
   const backup=await makeBackup(backupProject),blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
   if(blob.size>250*1024*1024)throw Error('案件檔超過 250 MB，請先另存照片原檔並減少本案件照片。');
   const name=`傾斜測量_${(backupProject.header.caseNumber||'未命名').replace(/[<>:"/\\|?*]/g,'_')}_${new Date().toISOString().slice(0,10)}.tiltsurvey`;
-  if(share){const file=new File([blob],name,{type:blob.type});if(!navigator.canShare?.({files:[file]}))throw Error('此裝置無法分享案件檔，請使用匯出');try{await navigator.share({files:[file],title:'傾斜測量案件檔'});}catch(e){if(e.name==='AbortError'){notice('已取消分享，匯出狀態未變更。');return;}throw e;}}
-  else downloadBlob(blob,name);
-  if(project===origin){project.lastExportedAt=backupProject.lastExportedAt;await queueSave();}notice(share?'完整案件檔已交由系統分享。':'完整案件檔已交由瀏覽器下載，請確認檔案已保存。');
+  return {origin,updatedAt:backupProject.updatedAt,file:new File([blob],name,{type:blob.type})};
 }
-async function adopt(newProject,media=[]){clearTimeout(saveTimer);await saving;await replaceProject(newProject,media);project=newProject;document.documentElement.dataset.saveState='saved';reportKind='all';selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;failedSave=false;storageBlocked=false;reportStale=true;updateStatus();render();}
+async function markExported(data){if(project===data.origin&&project.updatedAt===data.updatedAt){project.lastExportedAt=data.updatedAt;await queueSave();}}
+async function exportCase(){const data=await caseFile();downloadBlob(data.file,data.file.name);await markExported(data);notice('完整案件檔已交由瀏覽器下載，請確認檔案已保存。');}
+async function prepareShare(){
+  const job=++shareGeneration,button=$('#shareCaseButton');preparedShare=null;button.disabled=true;button.textContent='正在準備案件檔…';
+  try{
+    const data=await caseFile();if(job!==shareGeneration||project!==data.origin||project.updatedAt!==data.updatedAt)return;
+    if(!navigator.canShare?.({files:[data.file]}))throw Error('此裝置無法分享案件檔，請使用匯出');
+    preparedShare=data;button.textContent='分享已準備的案件檔';notice('案件檔已準備，請再次點擊「分享已準備的案件檔」。');
+  }catch(e){if(job===shareGeneration)throw e;}
+  finally{if(job===shareGeneration){button.disabled=false;if(!preparedShare)button.textContent='準備分享案件檔';}}
+}
+async function shareCase(){
+  const data=preparedShare;if(sharing||!data)return;
+  if(project!==data.origin||project.updatedAt!==data.updatedAt){invalidateShare();return;}
+  const button=$('#shareCaseButton');sharing=true;button.disabled=true;
+  try{
+    // Invoke synchronously from the second click; all media work has finished.
+    await navigator.share({files:[data.file],title:'傾斜測量案件檔'});
+    await markExported(data);notice('完整案件檔已交由系統分享。');
+  }catch(e){if(e.name==='AbortError'){notice('已取消分享，匯出狀態未變更。');return;}throw e;}
+  finally{sharing=false;button.disabled=false;}
+}
+async function adopt(newProject,media=[]){invalidateShare();clearTimeout(saveTimer);await saving;await replaceProject(newProject,media);project=newProject;document.documentElement.dataset.saveState='saved';reportKind='all';selectedPair=project.pairs[0]?.id;selectedFacade=project.facades[0].id;failedSave=false;storageBlocked=false;reportStale=true;updateStatus();render();}
 async function action(name){
   const pair=project.pairs.find(p=>p.id===selectedPair),facade=project.facades.find(f=>f.id===selectedFacade);
   if(name==='export')return exportCase();
-  if(name==='share')return exportCase(true);
+  if(name==='share')return preparedShare?shareCase():prepareShare();
   if(name==='verify-file'){$('#verifyFile').click();return;}
   if(name==='import'){ $('#importFile').click();return; }
   if(name==='new'||name==='sample'){if(await allowReplace(name==='new'?'建立空白案件':'載入合成示例')){await adopt(name==='new'?createProject():sampleProject());notice(name==='new'?'空白案件已建立。':'合成示例已載入，可直接預覽成果表。');}return;}
