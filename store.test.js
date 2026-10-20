@@ -1,3 +1,4 @@
+import {reportDocument} from './report.js';
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createProject,sampleProject,confirmObservation,isConfirmed} from './model.js';import {normalizeProject,makeBackup,parseBackup} from './store.js';import {reportIssues,resultsReport,rawReport} from './report.js';
 test('案件正規化、缺漏選填欄位補預設',()=>{const p=createProject();delete p.header.instrument;delete p.settings.minHeightCm;delete p.pairs[0].photos;const q=normalizeProject(p);assert.equal(q.header.instrument,'');assert.equal(q.settings.minHeightCm,'200');assert.deepEqual(q.pairs[0].photos,[]);});
@@ -9,3 +10,12 @@ test('匯入不得執行 HTML，報告文字會跳脫',()=>{const p=sampleProjec
 test('更正原因必填，保留前後值與時間',()=>{const p=sampleProject(),pair=p.pairs[0],f=p.facades[0];pair.inPlane.A.rounds[0].dxCm='2.4';assert.equal(isConfirmed(pair,f),false);assert.throws(()=>confirmObservation(p,pair,f,''),/原因/);confirmObservation(p,pair,f,'讀尺重查');assert.equal(p.auditLog.length,1);assert.match(p.auditLog[0].before,/2.3/);assert.match(p.auditLog[0].after,/2.4/);assert.match(rawReport(p),/讀尺重查/);assert.equal(isConfirmed(pair,f),true);});
 test('草稿／基準異動尚未確認時不可產生正式預覽',()=>{const p=sampleProject();assert.deepEqual(reportIssues(p),[]);p.pairs[0].inPlane.A.hCm='500';assert.match(reportIssues(p).join(),/尚未確認/);const q=createProject();q.pairs[0].mode='C';q.pairs[0].confirmed={snapshot:'old',at:'now'};assert.match(reportIssues(q).join(),/基準/);});
 test('預覽範本四值、合成量不在成果表、單數測點保留空白格',()=>{const p=sampleProject(),html=resultsReport(p);for(const n of [212,168,188,179])assert.match(html,new RegExp(`1／${n}`));assert.doesNotMatch(html,/合成參考值/);p.pairs.pop();assert.equal((resultsReport(p).match(/以下空白/g)||[]).length,2);});
+
+test('合成方位包含四象限及四個正方向',async()=>{
+ const {bearingText}=await import('./report.js');
+ for(const [a,label]of [[38.4,'北偏東 38.4°'],[141.6,'南偏東 38.4°'],[218.4,'南偏西 38.4°'],[321.6,'北偏西 38.4°'],[0,'正北'],[90,'正東'],[180,'正南'],[270,'正西']])assert.equal(bearingText(a),`${label}（方位角 ${a.toFixed(1)}°）`);
+ assert.equal(bearingText(null),'方位未定義');
+});
+test('成果表的門窗使用深灰細線且側立面標示臨路側',()=>{
+ const p=sampleProject(),html=reportDocument(p);assert.match(html,/stroke="#444" stroke-width="0.15"/);assert.match(html,/前（臨路側）/);
+});
