@@ -123,6 +123,8 @@ function reportView(){
   return heading('成果與輸出','把讀數、照片與位置整理成 A4 附件','照片附件及佈設圖可獨立輸出；成果表仍須先確認讀數。')+
     `<section class="card report-controls"><label class="field"><span>輸出內容</span><select id="reportKind">${[['all','完整附件（成果＋勾選項目）'],['results','成果表'],['photos','點位照片'],['map','測點佈設圖']].map(([v,t])=>option(v,t,reportKind)).join('')}</select></label><div class="button-row"><button class="primary" data-action="build-report">更新預覽</button><button data-action="print">系統列印／另存 PDF</button><button data-action="download-pdf">下載影像式 PDF</button><button data-action="export">匯出完整案件檔</button></div><label class="check-field"><input id="includeRaw" type="checkbox"${includeRaw?' checked':''}>附原始讀數表與更正紀錄</label><label class="check-field"><input id="includePhotos" type="checkbox"${includePhotos?' checked':''}>完整附件包含點位照片</label><label class="check-field"><input id="includeMap" type="checkbox"${includeMap?' checked':''}>完整附件包含佈設圖（有底圖時）</label><p class="hint">系統列印保留向量圖及可選取文字；直接下載 PDF 為影像式。輸出期間請保持此分頁開啟。</p><div id="reportWarnings"></div></section><div id="reportRoot" class="report-pages"></div>`+mobileCaseActions();
 }
+const resultsSizeObserver=new ResizeObserver(entries=>{const element=entries[0]?.target;if(element?.isConnected)document.documentElement.style.setProperty('--live-results-height',`${element.getBoundingClientRect().height}px`);});
+function observeResultsSize(){resultsSizeObserver.disconnect();const element=$('#liveResults');if(element)resultsSizeObserver.observe(element);else document.documentElement.style.removeProperty('--live-results-height');}
 function updateResults(){const pair=project.pairs.find(p=>p.id===selectedPair);if(tab==='readings'&&pair){$('#liveResults').innerHTML=liveResultsView(pair);$('#confirmState').textContent=isConfirmed(pair,project.facades.find(f=>f.id===pair.facadeId))?'本組讀數已確認':'本組有待確認的讀數';workspace.querySelectorAll('[data-record-axis]').forEach(e=>e.textContent='記錄狀態：'+(pair[e.dataset.recordAxis].status==='skipped'?'未施測':isConfirmed(pair,project.facades.find(f=>f.id===pair.facadeId))?'已確認':'待確認'));const more=workspace.querySelector('[data-pair-card] .form-disclosure>summary>span');if(more){more.textContent=moreSummary(pair);more.title=moreSummary(pair);}}}
 function render(){
   desktopActions.append(shareButton);mediaUI.dispose();reportGeneration++;
@@ -131,7 +133,7 @@ function render(){
   workspace.innerHTML=({case:caseView,facades:facadeView,readings:readingsView,photos:mediaUI.photosView,map:mediaUI.mapView,reports:reportView}[tab])();
   positionCaseActions();positionSelectors();updateCaseSummary();readingKeyboard();
   const active=$('.sidebar nav button.active'),nav=$('.sidebar nav');if(mobileLayout.matches)nav.scrollLeft=active.offsetLeft-nav.offsetLeft-(nav.clientWidth-active.clientWidth)/2;
-  updateResults();if(tab==='reports')buildReport();else mediaUI.mount(tab);
+  updateResults();observeResultsSize();if(tab==='reports')buildReport();else mediaUI.mount(tab);
 }
 function resizeReports(){const root=$('#reportRoot');if(root)root.style.setProperty('--report-scale',Math.min(1,root.clientWidth/(210*96/25.4)));}
 function buildReport(){
