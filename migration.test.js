@@ -51,3 +51,12 @@ test('實際 V0.4.0 分向案件與 V0.2 結構相容檔可讀取，成果與確
  const q=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]})).project;for(let i=0;i<p.pairs.length;i++){assert.deepEqual(calculatePair(q.pairs[i],q.facades[0],q.settings),calc.calculatePair(p.pairs[i],f,p.settings));assert.deepEqual(q.pairs[i].confirmed,p.pairs[i].confirmed);assert.equal(isConfirmed(q.pairs[i],q.facades[0]),true);}assert.equal(q.pairs[0].outPlane.mode,'B');
  const legacy=await load('b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc','model.js'),v2=legacy.sampleProject();v2.appVersion='0.2.0';const restored=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:v2,media:[]})).project;assert.equal(isConfirmed(restored.pairs[0],restored.facades[0]),true);assert.equal(calculatePair(restored.pairs[0],restored.facades[0]).inPlane.denominator,212);
 });
+
+test('實際 V0.4.1 案件保留混合方式、原始字串、成果與確認並可往返',async()=>{
+ const ref='bc271925c74944d00fa97cfd38922312403b408b',old=await load(ref,'model.js'),calc=await load(ref,'calc.js'),p=old.sampleProject(),pair=p.pairs[0],f=p.facades[0];pair.outPlane.mode='B';pair.outPlane.B.rounds=[{tp:{HD:'12.374',VD:'6.215'},tb:{HD:'12.345',VD:'1.350'}}];old.confirmObservation(p,pair,f,'V0.4.1 混合方式合成案例');
+ const contents=JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]}),q=parseBackup(contents).project;
+ assert.equal(q.schema,1);assert.deepEqual(q.pairs,p.pairs);assert.deepEqual(q.facades,p.facades);assert.deepEqual(q.header,p.header);
+ for(let i=0;i<p.pairs.length;i++){assert.deepEqual(calculatePair(q.pairs[i],q.facades[0],q.settings),calc.calculatePair(p.pairs[i],f,p.settings));assert.equal(isConfirmed(q.pairs[i],q.facades[0]),true);}
+ assert.deepEqual(parseBackup(JSON.stringify(await makeBackup(q))).project,q);
+ await fs.mkdir('output/migration',{recursive:true});await fs.writeFile('output/migration/v0.4.1.tiltsurvey',contents);await fs.writeFile('output/migration/v0.4.1-results.json',JSON.stringify({version:'0.4.1',ref,pairs:q.pairs.length,equal:true,confirmed:true,roundtrip:true},null,2));
+});

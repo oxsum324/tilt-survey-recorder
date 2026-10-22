@@ -1,4 +1,4 @@
-export const VERSION='0.4.1';
+export const VERSION='0.4.2';
 export const id=()=>crypto.randomUUID();
 const point=()=>({N:'',E:'',Z:''});
 export function measurement(axis) { return {mode:'',status:'measured',skipReason:'',A:{rounds:[{source:'offset',dxCm:'',upperCm:'',lowerCm:'',dir:axis==='inPlane'?'right':'back'}],hCm:''},B:{station:axis==='inPlane'?'rightSide':'front',rounds:[{tp:{HD:'',VD:''},tb:{HD:'',VD:''}}]},firstEnteredAt:null}; }

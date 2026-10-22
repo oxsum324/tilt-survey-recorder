@@ -44,6 +44,17 @@ try{
  await poll(page,async()=>assert.equal(await page.locator('.brand p').innerText(),'弘一工程 · 鑑定現場工具'));
  console.log('PASS 手機標題為 20 px，品牌副標與指定文案一致');
  await tab('readings');const summary=page.locator('#resultSummaryButton');
+ const sharedLabel=page.locator('.shared-height-row .field>span');metrics.sharedHeightLabel=[];
+ for(const bright of [false,true]){
+  if(bright)await sunlight();await page.evaluate(()=>scrollTo(0,0));
+  await poll(page,async()=>assert.equal(await sharedLabel.evaluate(e=>e.getClientRects().length),1));
+  await poll(page,async()=>assert.equal(await sharedLabel.evaluate(e=>e.textContent.replace(/\s/g,'')),'H（cm）'));
+  await poll(page,async()=>assert.equal(await page.locator('.shared-height-row .check-field').textContent(),'兩方向共用垂距 H'));
+  await poll(page,async()=>assert.equal(await sharedLabel.evaluate(e=>{const range=document.createRange();range.selectNodeContents(e);const rects=[...range.getClientRects()];return Math.max(...rects.map(r=>r.bottom))-Math.min(...rects.map(r=>r.top))<=parseFloat(getComputedStyle(e).fontSize)*1.5;}),true));
+  metrics.sharedHeightLabel.push(await sharedLabel.evaluate((e,bright)=>({mode:bright?'sunlight':'normal',text:e.textContent,rectCount:e.getClientRects().length,height:e.getBoundingClientRect().height}),bright));
+  await page.screenshot({path:`output/mobile-layout/shared-height-${bright?'sunlight':'normal'}-375.png`,fullPage:false});
+ }
+ await sunlight();console.log('PASS 375 px 一般／強光 H（cm）標籤單行，勾選保留共用垂距完整說明');
  await poll(page,async()=>assert.ok(await summary.evaluate(e=>e.getBoundingClientRect().height<=56)));
  await poll(page,async()=>assert.match(await summary.innerText(),/T1 1／212[\s\S]*T1′ 1／168/));
  await summary.click();await poll(page,async()=>assert.equal(await page.locator('#liveResultPanels').isVisible(),true));await summary.click();await poll(page,async()=>assert.equal(await page.locator('#liveResultPanels').isVisible(),false));
@@ -61,6 +72,26 @@ try{
  console.log('PASS 1280 px 桌機側欄 230 px、案件摘要正確、底部空白不超過 40%');
  await tab('readings');await poll(page,async()=>assert.ok(await page.locator('#liveResults').evaluate(e=>parseFloat(getComputedStyle(e).top)>document.querySelector('.app-header').getBoundingClientRect().height)));
  console.log('PASS 桌機即時結果維持 sticky，偏移量在表頭高度以下');
+ await poll(page,async()=>assert.equal(await page.locator('.shared-height-row').evaluate(e=>{const check=e.querySelector('.check-field').getBoundingClientRect(),field=e.querySelector('.field').getBoundingClientRect();return check.left<field.left&&check.top<field.bottom&&field.top<check.bottom;}),true));
+ await page.setViewportSize({width:1280,height:720});
+ await revealControl(page.locator('[data-rounds="0|outPlane|A"]'));await page.locator('[data-rounds="0|outPlane|A"]').selectOption('2');
+ await page.locator('[data-reading-axis="inPlane"] .form-disclosure').evaluate(e=>e.open=false);
+ const desktopTarget=page.locator('[data-field="pairs.0.outPlane.A.rounds.0.dxCm"]');
+ await poll(page,async()=>assert.equal(await page.locator('#liveResults').evaluate(e=>Math.round(parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop)*1000)===Math.round((parseFloat(getComputedStyle(e).top)+e.getBoundingClientRect().height+8)*1000)),true));
+ await desktopTarget.evaluate(e=>{const results=document.querySelector('#liveResults');scrollTo(0,scrollY+e.getBoundingClientRect().top-parseFloat(getComputedStyle(results).top)-20);});
+ await poll(page,async()=>assert.equal(await desktopTarget.evaluate(e=>{const r=e.getBoundingClientRect();return document.querySelector('#liveResults').contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2));}),true));
+ await page.locator('[data-reading-axis="inPlane"] .form-disclosure>summary').evaluate(e=>e.focus({preventScroll:true}));await page.keyboard.press('Tab');
+ await poll(page,async()=>assert.equal(await desktopTarget.evaluate(e=>document.activeElement===e),true));
+ await poll(page,async()=>assert.equal(await desktopTarget.evaluate(e=>{const r=e.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===e;}),true));
+ await poll(page,async()=>assert.equal(await desktopTarget.evaluate(e=>e.getBoundingClientRect().top>=document.querySelector('#liveResults').getBoundingClientRect().bottom+8),true));
+ metrics.desktopFocus=await desktopTarget.evaluate(e=>({field:e.dataset.field,top:e.getBoundingClientRect().top,bottom:e.getBoundingClientRect().bottom,resultsTop:document.querySelector('#liveResults').getBoundingClientRect().top,resultsHeight:document.querySelector('#liveResults').getBoundingClientRect().height,resultsBottom:document.querySelector('#liveResults').getBoundingClientRect().bottom,scrollPaddingTop:getComputedStyle(document.documentElement).scrollPaddingTop,centerHitsFocus:document.elementFromPoint(e.getBoundingClientRect().x+e.getBoundingClientRect().width/2,e.getBoundingClientRect().y+e.getBoundingClientRect().height/2)===e}));
+ await page.screenshot({path:'output/mobile-layout/desktop-tab-focus-1280.png',fullPage:false});
+ const previousResultsHeight=await page.locator('#liveResults').evaluate(e=>e.getBoundingClientRect().height);await field('pairs.0.inPlane.A.rounds.0.dxCm').fill('');
+ await poll(page,async()=>assert.ok(await page.locator('#liveResults').evaluate(e=>e.getBoundingClientRect().height)<previousResultsHeight));
+ await poll(page,async()=>assert.equal(await page.locator('#liveResults').evaluate(e=>Math.round(parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop)*1000)===Math.round((parseFloat(getComputedStyle(e).top)+e.getBoundingClientRect().height+8)*1000)),true));
+ metrics.desktopResized=await page.locator('#liveResults').evaluate((e,previous)=>({previousHeight:previous,height:e.getBoundingClientRect().height,scrollPaddingTop:getComputedStyle(document.documentElement).scrollPaddingTop}),previousResultsHeight);
+ await tab('case');await poll(page,async()=>assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollPaddingTop),'auto'));await page.setViewportSize({width:375,height:812});await tab('readings');await poll(page,async()=>assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollPaddingTop),'auto'));
+ console.log('PASS 1280 px Tab 焦點由實際遮擋位置捲到結果列下方，留白隨實際高度，非讀數頁與手機不套用');
  await page.setViewportSize({width:375,height:812});
  await page.evaluate(async()=>{localStorage.removeItem('tilt-survey-disclosures');const {sampleProject,createPair,confirmObservation}=await import('./model.js'),{replaceProject}=await import('./store.js'),p=sampleProject(),q=createPair(3,p.facades[0].id);q.inPlane.A.hCm=q.outPlane.A.hCm='441.0';q.inPlane.A.rounds[0].dxCm=q.outPlane.A.rounds[0].dxCm='2.0';p.pairs.push(q);confirmObservation(p,q,p.facades[0]);await replaceProject(p);});
  await page.reload();await tab('readings');const before=await snapshot();
