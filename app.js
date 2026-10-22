@@ -81,7 +81,7 @@ function liveResultsView(pair){
 }
 function numericRound(round,prefix,keys){return `<div class="coordinate-table">${['tp','tb'].map(pos=>`<div class="coordinate-point"><h4>${pos==='tp'?'TP 上測點':'TB 下測點'}</h4><div class="coordinate-fields">${keys.map(([key,t])=>input(t,`${prefix}.${pos}.${key}`,round[pos][key],{unit:'m',signed:key!=='HD'})).join('')}</div></div>`).join('')}</div>`;}
 const disclosureKey='tilt-survey-disclosures';
-let disclosurePrefs={};try{disclosurePrefs=JSON.parse(localStorage.getItem(disclosureKey)||'{}')||{};}catch{}
+let disclosurePrefs={};try{const savedPrefs=JSON.parse(localStorage.getItem(disclosureKey)||'{}');if(savedPrefs&&typeof savedPrefs==='object'&&!Array.isArray(savedPrefs))disclosurePrefs=savedPrefs;}catch{}
 function disclosure(key,title,summary,body,force=false){return `<details class="form-disclosure" data-ui-disclosure="${esc(key)}"${force||disclosurePrefs[key]===true?' open':''}><summary><b>${title}</b><span title="${esc(summary)}">${esc(summary)}</span></summary><div class="disclosure-body">${body}</div></details>`;}
 function moreSummary(pair){return [pair.corner==='custom'?`自訂 ${pair.cornerOffsetCm||'—'} cm`:pair.corner==='left'?'左角':'右角',pair.tbHeightCm?`TB ${pair.tbHeightCm} cm`:'',pair.note?`備註：${pair.note}`:''].filter(Boolean).join(' ‧ ');}
 function directionForm(pair,index,axis){

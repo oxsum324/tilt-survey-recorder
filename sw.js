@@ -1,7 +1,7 @@
 // Service worker lifecycle adapted from oxsum324/level-survey-recorder, sw.js,
 // commit 78f2ae02646510290854e89ff1ba901776bce9f5. 複製後獨立演進。
 // Versioned shell; all modules load eagerly. Activate the completed cache; a refresh loads the new shell. Case data is unchanged.
-const CACHE='tilt-survey-v0.4.0';
+const CACHE='tilt-survey-v0.4.1';
 const APP_FILES=['./','./index.html','./app.js','./model.js','./integrity.js','./calc.js','./sketch.js','./report.js','./store.js','./style.css','./manifest.webmanifest','./icon.svg','./icon-180.png','./icon-192.png','./icon-512.png','./annotation-geometry.js','./annotation.js','./exif.js','./media.js','./media-ui.js','./plan.js','./media-report.js','./pdf.js','./display.js','./vendor/html2pdf.bundle.min.js','./vendor/html2pdf-LICENSE.txt','./vendor/html2pdf.bundle.min.js.LICENSE.txt'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(APP_FILES.map(url=>new Request(new URL(url,self.registration.scope),{cache:'reload'})))).then(()=>self.skipWaiting())));
 self.addEventListener('message',event=>{if(event.data==='SKIP_WAITING')self.skipWaiting();});

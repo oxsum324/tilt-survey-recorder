@@ -1,9 +1,10 @@
-# 傾斜測量紀錄 V0.4.0
+# 傾斜測量紀錄 V0.4.1
 
 現場功能測試版。純前端 ES modules，無建置工具、無後端，案件、讀數、原始照片與底圖只存在本機瀏覽器。
 
-- [合併發布後的測試網址](https://oxsum324.github.io/tilt-survey-recorder/?release=0.4.0)
+- [合併發布後的測試網址](https://oxsum324.github.io/tilt-survey-recorder/?release=0.4.1)
 - 本版以 PR 交付，尚未合併 main；網址版本參數本身不會部署新版。
+- [V0.4.1 手機介面交付說明](docs/versions/v0.4.1.md)
 - [V0.4.0 交付說明](docs/versions/v0.4.0.md)
 - [V0.3.0 交付與測試](docs/versions/v0.3.0.md)
 - [第一期交付紀錄](docs/versions/v0.1.0.md)
@@ -90,3 +91,11 @@ schema 維持 1。V0.4.0 以前或未附 appVersion 的舊案件，兩方向一�
 ## 發布清單與私人字串
 
 只發布 build-site.mjs 明列的檔案。private-denylist.txt 為本機忽略檔，每行一個私人字串；可參考 private-denylist.example.txt 的示例格式。CI 由使用者設定 TILT_PRIVATE_DENYLIST secret（換行分隔）；兩個來源合併檢查，均未提供時會警告並僅套用通用路徑規則。這次只清理新 HEAD，既有公開 Git 歷史未改寫。
+
+## V0.4.1 手機讀數流程
+
+640 px 以下使用單列可捲動步驟；「狀態」展開本機保存、離線、強光與常亮。頁面說明由標題旁的「說明」開啟。匯出、匯入、驗證及支援裝置的分享，位於案件頁與成果頁底部。
+
+讀數頁底部摘要列可點擊展開完整結果。測點組的「更多設定」及各方向「本方向設定」保留所有原控制項；有額外組設定、未施測或兩測回時會自動展開。摺疊偏好只存 localStorage 的 tilt-survey-disclosures，不進案件檔；讀數鍵盤依可見欄位使用 next／done。桌機側欄顯示案件摘要；匯出時間沿用案件 lastExportedAt 的資料版次時間。
+
+正常畫面色票與水準測量現行色票對齊。強光與 A4 輸出不套用本次介面色票；既有公式、原始數值、確認、更正及備份格式維持。
