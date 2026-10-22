@@ -74,6 +74,24 @@ try{
  const first=page.locator('[data-field="pairs.0.inPlane.A.rounds.0.dxCm"]'),last=page.locator('[data-field="pairs.0.outPlane.A.rounds.0.dxCm"]');
  await poll(page,async()=>assert.equal(await first.getAttribute('enterkeyhint'),'next'));await first.press('Enter');await poll(page,async()=>assert.equal(await last.evaluate(e=>document.activeElement===e),true));await poll(page,async()=>assert.equal(await last.getAttribute('enterkeyhint'),'done'));await last.press('Enter');await poll(page,async()=>assert.equal(await last.evaluate(e=>document.activeElement===e),false));
  console.log('PASS 讀數鍵盤 next 僅移到可見欄位，最後欄位 done 可收鍵盤');
+ metrics.keyboardFocus=[];
+ const focusClearance=async(locator,mode,key)=>{
+  await poll(page,async()=>assert.equal(await locator.evaluate(e=>document.activeElement===e),true));
+  await poll(page,async()=>assert.equal(await locator.evaluate(e=>e.getBoundingClientRect().bottom<=document.querySelector('.result-summary-button').getBoundingClientRect().top),true));
+  await poll(page,async()=>assert.equal(await locator.evaluate(e=>{const r=e.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===e;}),true));
+  metrics.keyboardFocus.push(await locator.evaluate((e,{mode,key})=>({mode,key,field:e.dataset.field,top:e.getBoundingClientRect().top,bottom:e.getBoundingClientRect().bottom,summaryTop:document.querySelector('.result-summary-button').getBoundingClientRect().top,centerHitsFocus:document.elementFromPoint(e.getBoundingClientRect().x+e.getBoundingClientRect().width/2,e.getBoundingClientRect().y+e.getBoundingClientRect().height/2)===e}),{mode,key}));
+ };
+ for(const bright of [false,true]){
+  if(bright)await sunlight();
+  await first.click();await first.press('Enter');await focusClearance(last,bright?'sunlight':'normal','Enter');
+  if(!bright)await page.screenshot({path:'output/mobile-layout/keyboard-focus-375.png',fullPage:false});
+  await last.press('Tab');await focusClearance(page.locator('[data-field="pairs.0.outPlane.A.rounds.0.dir"]'),bright?'sunlight':'normal','Tab');
+  await poll(page,async()=>assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollPaddingBottom),await page.locator('#main').evaluate(e=>getComputedStyle(e).paddingBottom)));
+ }
+ await sunlight();
+ await page.setViewportSize({width:1280,height:900});await poll(page,async()=>assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollPaddingBottom),'auto'));
+ await page.setViewportSize({width:375,height:812});await page.emulateMedia({media:'print'});await poll(page,async()=>assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollPaddingBottom),'auto'));await page.emulateMedia({media:'screen'});
+ console.log('PASS 375 px 一般／強光 Enter 與 Tab 焦點完整避開摘要且中心可點，捲動留白一致、桌機與列印不套用');
  await revealControl(rounds);await rounds.selectOption('2');await poll(page,async()=>assert.notEqual(await direction.getAttribute('open'),null));await field('pairs.0.inPlane.status').selectOption('skipped');await poll(page,async()=>assert.notEqual(await direction.getAttribute('open'),null));await poll(page,async()=>assert.match(await direction.locator('summary').innerText(),/未施測[\s\S]*2 測回/));
  console.log('PASS 兩測回與未施測自動展開，摘要顯示實際狀態');
 
