@@ -10,6 +10,7 @@ import {imagePdf} from './pdf.js';
 import {downloadBlob} from './media.js';
 let project,tab='case',selectedPair,selectedFacade,includeRaw=true,includePhotos=true,includeMap=true,reportKind='all',reportPromise=Promise.resolve(),reportGeneration=0,saveTimer,saving=Promise.resolve(),failedSave=false,storageBlocked=false,reportStale=true;
 let preparedShare=null,shareGeneration=0,sharing=false;
+let resultsExpanded=false;
 const $=selector=>document.querySelector(selector),workspace=$('#workspace'),shareButton=$('#shareCaseButton'),desktopActions=$('#desktopCaseActions'),mobileLayout=matchMedia('(max-width:640px)');
 const option=(value,text,current)=>`<option value="${value}"${value===current?' selected':''}>${text}</option>`;
 function input(label,path,value,{unit='',signed=false,placeholder='',type='text',numeric=true}={}) {
@@ -73,6 +74,11 @@ function resultView(pair){
   const f=project.facades.find(f=>f.id===pair.facadeId),r=calculatePair(pair,f,project.settings),l=labels(pair,project.settings);
   return ['inPlane','outPlane'].map(axis=>{const v=r[axis];return `<div class="result-box"><p>${l[axis]}｜${axis==='inPlane'?'立面內（左右）':'立面外（前後）'}</p>${v.status==='ok'?`<strong>${v.ratioText}</strong><b>${esc(v.directionText)}</b><div class="result-values">△X ${v.dxCm} cm　H ${v.hCm} cm</div>${v.differenceMm===null?'':`<small>兩測回較差 ${+v.differenceMm.toFixed(6)} mm</small>`}${v.warnings.map(w=>`<div class="result-warning">${esc(w)}</div>`).join('')}`:v.status==='skipped'?`<strong class="no-result">未施測</strong><span>${esc(v.reason)}</span>`:`<strong class="no-result">待完成讀數</strong><span>${esc(v.error)}</span>`}</div>`;}).join('');
 }
+function liveResultsView(pair){
+  const f=project.facades.find(f=>f.id===pair.facadeId),r=calculatePair(pair,f,project.settings),l=labels(pair,project.settings);
+  const summary=['inPlane','outPlane'].map(axis=>{const v=r[axis],text=v.status==='ok'?`${v.ratioText} ${v.directionText.replace('傾','')}`:v.status==='skipped'?'未施測':'待完成';return `<span>${l[axis]} ${esc(text)}</span>`;}).join('<span class="result-separator">｜</span>');
+  return `<div id="liveResultPanels" class="live-result-panels"${resultsExpanded?' data-expanded="true"':''}>${resultView(pair)}</div><button id="resultSummaryButton" class="result-summary-button" data-action="toggle-results" aria-expanded="${resultsExpanded}" aria-controls="liveResultPanels" aria-label="${resultsExpanded?'收回':'展開'}完整即時結果">${summary}</button>`;
+}
 function numericRound(round,prefix,keys){return `<div class="coordinate-table">${['tp','tb'].map(pos=>`<div class="coordinate-point"><h4>${pos==='tp'?'TP 上測點':'TB 下測點'}</h4><div class="coordinate-fields">${keys.map(([key,t])=>input(t,`${prefix}.${pos}.${key}`,round[pos][key],{unit:'m',signed:key!=='HD'})).join('')}</div></div>`).join('')}</div>`;}
 function directionForm(pair,index,axis){
   const m=pair[axis],prefix=`pairs.${index}.${axis}`,l=labels(pair,project.settings),isIn=axis==='inPlane',mode=modeFor(pair,axis);
@@ -92,9 +98,10 @@ function reportView(){
   return heading('成果與輸出','把讀數、照片與位置整理成 A4 附件','照片附件及佈設圖可獨立輸出；成果表仍須先確認讀數。')+
     `<section class="card report-controls"><label class="field"><span>輸出內容</span><select id="reportKind">${[['all','完整附件（成果＋勾選項目）'],['results','成果表'],['photos','點位照片'],['map','測點佈設圖']].map(([v,t])=>option(v,t,reportKind)).join('')}</select></label><div class="button-row"><button class="primary" data-action="build-report">更新預覽</button><button data-action="print">系統列印／另存 PDF</button><button data-action="download-pdf">下載影像式 PDF</button><button data-action="export">匯出完整案件檔</button></div><label class="check-field"><input id="includeRaw" type="checkbox"${includeRaw?' checked':''}>附原始讀數表與更正紀錄</label><label class="check-field"><input id="includePhotos" type="checkbox"${includePhotos?' checked':''}>完整附件包含點位照片</label><label class="check-field"><input id="includeMap" type="checkbox"${includeMap?' checked':''}>完整附件包含佈設圖（有底圖時）</label><p class="hint">系統列印保留向量圖及可選取文字；直接下載 PDF 為影像式。輸出期間請保持此分頁開啟。</p><div id="reportWarnings"></div></section><div id="reportRoot" class="report-pages"></div>`+mobileCaseActions();
 }
-function updateResults(){const pair=project.pairs.find(p=>p.id===selectedPair);if(tab==='readings'&&pair){$('#liveResults').innerHTML=resultView(pair);$('#confirmState').textContent=isConfirmed(pair,project.facades.find(f=>f.id===pair.facadeId))?'本組讀數已確認':'本組有待確認的讀數';}}
+function updateResults(){const pair=project.pairs.find(p=>p.id===selectedPair);if(tab==='readings'&&pair){$('#liveResults').innerHTML=liveResultsView(pair);$('#confirmState').textContent=isConfirmed(pair,project.facades.find(f=>f.id===pair.facadeId))?'本組讀數已確認':'本組有待確認的讀數';}}
 function render(){
   desktopActions.append(shareButton);mediaUI.dispose();reportGeneration++;
+  document.body.classList.toggle('readings-active',tab==='readings');
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   workspace.innerHTML=({case:caseView,facades:facadeView,readings:readingsView,photos:mediaUI.photosView,map:mediaUI.mapView,reports:reportView}[tab])();
   positionCaseActions();updateCaseSummary();
@@ -152,6 +159,7 @@ async function action(name){
   const pair=project.pairs.find(p=>p.id===selectedPair),facade=project.facades.find(f=>f.id===selectedFacade);
   if(name==='export')return exportCase();
   if(name==='share')return preparedShare?shareCase():prepareShare();
+  if(name==='toggle-results'){resultsExpanded=!resultsExpanded;updateResults();$('#resultSummaryButton').focus({preventScroll:true});return;}
   if(name==='verify-file'){$('#verifyFile').click();return;}
   if(name==='import'){ $('#importFile').click();return; }
   if(name==='new'||name==='sample'){if(await allowReplace(name==='new'?'建立空白案件':'載入合成示例')){await adopt(name==='new'?createProject():sampleProject());notice(name==='new'?'空白案件已建立。':'合成示例已載入，可直接預覽成果表。');}return;}
@@ -229,6 +237,7 @@ $('#importFile').addEventListener('change',async event=>{
 });
 document.addEventListener('keydown',event=>{if(event.key==='Enter'&&event.target.matches('input[data-field]')){const fields=Array.from(workspace.querySelectorAll('input[data-field]'));const next=fields[fields.indexOf(event.target)+1];if(next){event.preventDefault();next.focus();}}});
 window.addEventListener('resize',resizeReports);
+new ResizeObserver(([entry])=>document.documentElement.style.setProperty('--app-header-height',`${entry.target.getBoundingClientRect().height}px`)).observe($('.app-header'));
 window.addEventListener('pagehide',()=>{clearTimeout(saveTimer);if(project)queueSave();});
 let swReload=false,updateRequested=false,previousController=navigator.serviceWorker?.controller;
 if('serviceWorker'in navigator){navigator.serviceWorker.register('./sw.js',{updateViaCache:'none'}).then(async registration=>{await navigator.serviceWorker.ready;$('#offlineStatus').textContent=navigator.onLine?'離線資源已準備':'離線使用中';const showUpdate=()=>{if(registration.waiting){const button=$('#updateButton');button.hidden=false;button.onclick=async()=>{await queueSave();if(failedSave){notice('請先匯出案件備份，再重新載入新版。',true);return;}updateRequested=true;if(registration.waiting)registration.waiting.postMessage('SKIP_WAITING');else location.reload();};}};showUpdate();registration.addEventListener('updatefound',()=>registration.installing?.addEventListener('statechange',showUpdate));}).catch(()=>{$('#offlineStatus').textContent='離線資源尚未就緒';});}
