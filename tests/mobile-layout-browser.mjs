@@ -12,6 +12,7 @@ try{
   if(['case','reports'].includes(tab))for(const action of ['export','import','verify-file'])await poll(page,async()=>assert.equal(await page.locator(`.mobile-case-actions [data-action="${action}"]`).isVisible(),true));
  }
  console.log('PASS 375 px 六頁首卡不超過 150 px、整頁等寬、目前分段可見、案件操作保留');
+ await poll(page,async()=>assert.equal(await page.locator('.section-heading h2').evaluate(e=>getComputedStyle(e).fontSize),'20px'));await poll(page,async()=>assert.equal(await page.locator('.brand p').innerText(),'弘一工程 · 鑑定現場工具'));console.log('PASS 手機標題為 20 px，品牌副標與指定文案一致');
  await page.locator('[data-tab="readings"]').click();const summary=page.locator('#resultSummaryButton');await poll(page,async()=>assert.ok(await summary.evaluate(e=>e.getBoundingClientRect().height<=56)));await poll(page,async()=>assert.match(await summary.innerText(),/T1 1／212[\s\S]*T1′ 1／168/));
  await summary.click();await poll(page,async()=>assert.equal(await page.locator('#liveResultPanels').isVisible(),true));await summary.click();await poll(page,async()=>assert.equal(await page.locator('#liveResultPanels').isVisible(),false));
  const rounds=page.locator('[data-rounds="0|inPlane|A"]');await revealControl(rounds);await rounds.evaluate(e=>e.scrollIntoView({block:'center'}));await poll(page,async()=>assert.equal(await rounds.evaluate(e=>{const r=e.getBoundingClientRect();return document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===e;}),true));await fs.mkdir('output/mobile-layout',{recursive:true});await page.screenshot({path:'output/mobile-layout/round-fields-375.png',fullPage:false});
