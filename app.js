@@ -10,7 +10,7 @@ import {imagePdf} from './pdf.js';
 import {downloadBlob} from './media.js';
 let project,tab='case',selectedPair,selectedFacade,includeRaw=true,includePhotos=true,includeMap=true,reportKind='all',reportPromise=Promise.resolve(),reportGeneration=0,saveTimer,saving=Promise.resolve(),failedSave=false,storageBlocked=false,reportStale=true;
 let preparedShare=null,shareGeneration=0,sharing=false;
-const $=selector=>document.querySelector(selector),workspace=$('#workspace');
+const $=selector=>document.querySelector(selector),workspace=$('#workspace'),shareButton=$('#shareCaseButton'),desktopActions=$('#desktopCaseActions'),mobileLayout=matchMedia('(max-width:640px)');
 const option=(value,text,current)=>`<option value="${value}"${value===current?' selected':''}>${text}</option>`;
 function input(label,path,value,{unit='',signed=false,placeholder='',type='text',numeric=true}={}) {
   return `<label class="field"><span>${label}${unit?` <small>（${unit}）</small>`:''}</span><div class="input-wrap"><input data-field="${path}" value="${esc(value)}" type="${type}" ${numeric?'inputmode="decimal"':''} ${placeholder?`placeholder="${esc(placeholder)}"`:''} autocomplete="off"${type==='text'?' maxlength="3000"':''}>${signed?`<button class="sign-button" type="button" data-sign="${path}" aria-label="${label}切換正負號">±</button>`:''}</div></label>`;
@@ -21,6 +21,7 @@ function get(path){return path.split('.').reduce((obj,key)=>obj?.[key],project);
 function set(path,value){const keys=path.split('.'),last=keys.pop();keys.reduce((obj,key)=>obj[key],project)[last]=value;}
 function notice(text,error=false){$('#notice').hidden=false;$('#notice').textContent=text;$('#notice').className=error?'notice error':'notice';}
 function updateStatus(){
+  if(project)updateCaseSummary();
   const unexported=project.updatedAt!==project.lastExportedAt;
   $('#saveStatus').textContent=failedSave?'本機保存失敗，請立即匯出':unexported?'有未匯出的變更':'本機已保存 · 已匯出';
   $('#saveStatus').className=failedSave?'status-error':unexported?'status-pending':'status-saved';
@@ -37,19 +38,34 @@ async function allowReplace(title){
   if(answer.value==='export'){try{await exportCase();}catch(e){notice(e.message,true);return false;}}
   return answer.value==='export'||answer.value==='replace';
 }
-function heading(eyebrow,title,text){return `<div class="section-heading"><p class="eyebrow">${eyebrow}</p><h2>${title}</h2><p>${text}</p></div>`;}
+function heading(eyebrow,title,text){const short={'案件設定':'案件與表頭','立面示意':'立面參數','現場讀數':'測點與讀數','成果與輸出':'成果與輸出'}[eyebrow]||title;return `<div class="section-heading"><p class="eyebrow">${eyebrow}</p><h2 aria-label="${esc(title)}"><span class="heading-full">${title}</span><span class="heading-short">${short}</span></h2><p>${text}</p><details class="page-help"><summary aria-label="${esc(short)}使用說明">說明</summary><p>${text}</p></details></div>`;}
+function mobileCaseActions(){return `<section class="card mobile-case-actions" aria-label="案件檔案操作"><h3>案件檔案與備份</h3><div class="button-row"><button data-action="export">匯出案件檔</button><button data-action="import">匯入案件檔</button><button data-action="verify-file">驗證案件檔指紋</button><span class="share-slot"></span></div><p class="hint">不同裝置不會同步；離開現場前請確認完整案件檔已保存。</p></section>`;}
+function updateCaseSummary(){
+  const completed=project.pairs.reduce((n,p)=>{const f=project.facades.find(f=>f.id===p.facadeId);if(!f||!isConfirmed(p,f))return n;const r=calculatePair(p,f,project.settings);return n+['inPlane','outPlane'].filter(axis=>r[axis].status==='ok').length;},0);
+  const time=project.lastExportedAt?new Date(project.lastExportedAt).toLocaleString('zh-TW',{hour12:false}):'尚未匯出';
+  $('#caseSummary').innerHTML=`<h3>案件摘要</h3><dl><dt>案件名稱</dt><dd>${esc(project.header.caseNumber||'未命名案件')}</dd><dt>測點組數</dt><dd>${project.pairs.length} 組</dd><dt>已完成方向數</dt><dd>${completed}／${project.pairs.length*2}（已確認且可計算）</dd><dt>上次匯出時間</dt><dd>${esc(time)}</dd></dl>`;
+}
+function positionCaseActions(){
+  desktopActions.append(shareButton);const slot=workspace.querySelector('.share-slot');if(mobileLayout.matches&&slot)slot.append(shareButton);
+}
+function responsiveChrome(){
+  $('#statusPanel').open=!mobileLayout.matches;
+  const noticeBox=$('#notice');if(mobileLayout.matches)$('#mobileNoticeSlot').append(noticeBox);else $('#main').prepend(noticeBox);
+  positionCaseActions();
+}
+mobileLayout.addEventListener('change',responsiveChrome);responsiveChrome();
 function caseView(){
   const h=project.header;
   return heading('案件設定','先留下這次量測的基本資料','表頭皆可編輯；未填欄位會以「○○」呈現，並在輸出前提醒。')+
     `<section class="card"><h3>案件與成果表表頭</h3><div class="form-grid">${[['orgName','公會／機關名稱'],['caseNumber','鑑定案編號'],['householdNo','住戶編號'],['address','測量地址'],['surveyDate','測量日期'],['surveyor','測量人員'],['instrument','使用儀器（廠牌型號）']].map(([k,t])=>input(t,`header.${k}`,h[k],{numeric:false,placeholder:k==='surveyDate'?'例：115年09月30日':''})).join('')}</div></section>
     <section class="card"><h3>新增測點的預設作業方式</h3><div class="mode-cards">${[['A','直接讀偏移量','↕','經緯儀、垂直儀或錘球，現場已讀得 ΔX'],['B','水平距與高差','↗','全站儀一個測站量一個方向，輸入 HD／VD'],['C','三維座標','⊥','同組 TP／TB 座標，同時分解兩個方向']].map(([m,t,icon,d])=>`<button data-default-mode="${m}" class="mode-card${project.settings.defaultMode===m?' selected':''}" aria-pressed="${project.settings.defaultMode===m}"><span class="mode-icon">${icon}</span><b>${m}｜${t}</b><span>${d}</span></button>`).join('')}</div></section>
     <section class="card"><h3>量測提示與編號 <span class="tag">可調整</span></h3><p>下列設定僅作讀數提示，不是規範判定值。</p><div class="form-grid">${input('兩測回較差提示值','settings.toleranceMm',project.settings.toleranceMm,{unit:'mm'})}${input('小偏移提示值','settings.minOffsetMm',project.settings.minOffsetMm,{unit:'mm'})}${input('短垂距提示值','settings.minHeightCm',project.settings.minHeightCm,{unit:'cm'})}${select('測線編號','settings.labelStyle',project.settings.labelStyle,[['prime','T1／T1′（範本）'],['TS','T1／S1（自訂對應）']])}</div>${check('方向加註絕對方位（須填立面朝向）','settings.showCompass',project.settings.showCompass)}<p class="hint">T／S 在本工具僅為立面內、立面外的命名選項；與特定手冊之工地相對方向不自動對應。</p></section>
-    <section class="card"><h3>開始試填</h3><div class="button-row"><button class="primary" data-action="tab-readings">前往測點與讀數 →</button><button data-action="sample">載入範本合成示例</button><button data-action="new">另建空白案件</button></div><p class="hint">示例僅含樣張數值，不含真實案件資料。</p></section>`;
+    <section class="card"><h3>開始試填</h3><div class="button-row"><button class="primary" data-action="tab-readings">前往測點與讀數 →</button><button data-action="sample">載入範本合成示例</button><button data-action="new">另建空白案件</button></div><p class="hint">示例僅含樣張數值，不含真實案件資料。</p></section>`+mobileCaseActions();
 }
 function facadeView(){
   const index=project.facades.findIndex(f=>f.id===selectedFacade);const f=project.facades[index],prefix=`facades.${index}`;
   return heading('立面示意','用立面參數描述測線位置','參數只供圖面示意；量測垂距 H 仍取自原始讀數。')+
-    `<div class="button-row facade-list">${project.facades.map(f=>`<button data-facade="${f.id}" class="${f.id===selectedFacade?'primary':''}">${esc(f.name)}</button>`).join('')}<button data-action="add-facade">＋新增立面</button></div>
+    `<div class="card selector-card button-row facade-list">${project.facades.map(f=>`<button data-facade="${f.id}" class="${f.id===selectedFacade?'primary':''}">${esc(f.name)}</button>`).join('')}<button data-action="add-facade">＋新增立面</button></div>
     <section class="card"><h3>立面資料</h3><div class="form-grid">${input('立面名稱',`${prefix}.name`,f.name,{numeric:false})}${input('外法線朝向（北＝0，順時針）',`${prefix}.facingDeg`,f.facingDeg,{unit:'度',placeholder:'選填，0 至小於 360'})}${input('立面寬',`${prefix}.building.widthCm`,f.building.widthCm,{unit:'cm'})}${input('側立面繪製長度',`${prefix}.building.sideShownCm`,f.building.sideShownCm,{unit:'cm'})}${input('女兒牆高度',`${prefix}.building.parapetCm`,f.building.parapetCm,{unit:'cm'})}${select('一樓開口形式',`${prefix}.building.groundFloorType`,f.building.groundFloorType,[['shop','店面'],['house','住宅'],['blank','不畫開口']])}</div>${check('繪製開口示意',`${prefix}.building.showOpenings`,f.building.showOpenings)}<h4>各樓層樓高（由下而上）</h4><div class="floor-grid">${f.building.floorHeightsCm.map((h,i)=>input(`${i+1}F 樓高`,`${prefix}.building.floorHeightsCm.${i}`,h,{unit:'cm'})).join('')}</div><div class="button-row"><button data-action="add-floor">＋新增樓層</button><button data-action="remove-floor" ${f.building.floorHeightsCm.length===1?'disabled':''}>移除頂層</button></div><p class="hint">預設樓高及寬度均可調整；TB 離地高度未量測時，圖面會明確註記。</p></section>
     <section class="card"><h3>模式 C 的立面基準</h3><p>兩點法由面向立面的左端 A 指向右端 B；方位角也是由左至右方向。</p>${select('基準方式',`${prefix}.baseline.method`,f.baseline.method,[['none','尚未設定'],['twoPoints','兩點法（A 左、B 右）'],['azimuth','方位角法']])}<div class="form-grid">${f.baseline.method==='twoPoints'?['A','B'].map(pos=>['N','E'].map(key=>input(`${pos}（${pos==='A'?'左端':'右端'}）${key}（${key==='N'?'北':'東'}）`,`${prefix}.baseline.${pos}.${key}`,f.baseline[pos][key],{unit:'m',signed:true})).join('')).join(''):f.baseline.method==='azimuth'?input('由左至右方位角 α',`${prefix}.baseline.azimuthDeg`,f.baseline.azimuthDeg,{unit:'度'}):''}</div><p class="hint">儀器 X／Y 軸與 N／E 的對應仍須依實際儀器確認。</p></section>`;
 }
@@ -65,7 +81,7 @@ function directionForm(pair,index,axis){
 function readingsView(){
   const index=project.pairs.findIndex(p=>p.id===selectedPair),pair=project.pairs[index],uses=mode=>pair&&['inPlane','outPlane'].some(axis=>modeFor(pair,axis)===mode);
   let content=heading('現場讀數','先確認測點，再記錄兩個方向','方向基準：站在立面外、面向立面。向後表示頂部朝建物內側。')+
-    `<div class="button-row pair-list">${project.pairs.map(p=>`<button data-pair="${p.id}" class="${p.id===selectedPair?'primary':''}">測點組 ${p.index}${isConfirmed(p,project.facades.find(f=>f.id===p.facadeId))?' ✓':''}</button>`).join('')}<button data-action="add-pair">＋新增測點組</button></div>`;
+    `<div class="card selector-card button-row pair-list">${project.pairs.map(p=>`<button data-pair="${p.id}" class="${p.id===selectedPair?'primary':''}">測點組 ${p.index}${isConfirmed(p,project.facades.find(f=>f.id===p.facadeId))?' ✓':''}</button>`).join('')}<button data-action="add-pair">＋新增測點組</button></div>`;
   if(!pair)return content+'<section class="card">請新增測點組。</section>';
   content+=`<div id="liveResults" class="live-results" aria-live="polite">${resultView(pair)}</div><section class="card"><div class="form-grid">${select('測點組預設作業方式（切換套用兩方向）',`pairs.${index}.mode`,pair.mode,[['A','A｜直接偏移量'],['B','B｜水平距與高差'],['C','C｜三維座標']])}${select('所屬立面',`pairs.${index}.facadeId`,pair.facadeId,project.facades.map(f=>[f.id,f.name]))}${select('量測角位置',`pairs.${index}.corner`,pair.corner,[['right','右角'],['left','左角'],['custom','自訂測線位置']])}${pair.corner==='custom'?input('測線距立面左端',`pairs.${index}.cornerOffsetCm`,pair.cornerOffsetCm,{unit:'cm'}):''}${input('TB 離地高度',`pairs.${index}.tbHeightCm`,pair.tbHeightCm,{unit:'cm',placeholder:'未量測可留空'})}</div>${input('現場備註',`pairs.${index}.note`,pair.note,{numeric:false})}${uses('A')?check('兩方向共用相同垂距 H',`pairs.${index}.sharedH`,pair.sharedH)+(pair.sharedH?input('共用垂距 H',`pairs.${index}.inPlane.A.hCm`,pair.inPlane.A.hCm,{unit:'cm'}):''):''}${uses('B')?'<p class="hint">測站應位於待測分量的方向線上；視線斜交時，量得值為視線方向分量。</p>':''}${uses('C')?'<p class="hint">N（北）、E（東）、Z（高程），請先在「立面參數」設定基準。</p>':''}</section>`;
   if(uses('C'))content+=`<section class="card"><h3>TP／TB 共用三維座標</h3><label class="field"><span>座標測回數</span><select data-rounds="${index}|pair|C">${[1,2].map(n=>option(String(n),`${n} 測回`,String(pair.C.rounds.length))).join('')}</select></label>${pair.C.rounds.map((r,i)=>`<div class="round-block"><h4>第 ${i+1} 測回</h4>${numericRound(r,`pairs.${index}.C.rounds.${i}`,[['N','N（北）'],['E','E（東）'],['Z','Z（高程）']])}</div>`).join('')}</section>`;
@@ -74,13 +90,15 @@ function readingsView(){
 }
 function reportView(){
   return heading('成果與輸出','把讀數、照片與位置整理成 A4 附件','照片附件及佈設圖可獨立輸出；成果表仍須先確認讀數。')+
-    `<section class="card report-controls"><label class="field"><span>輸出內容</span><select id="reportKind">${[['all','完整附件（成果＋勾選項目）'],['results','成果表'],['photos','點位照片'],['map','測點佈設圖']].map(([v,t])=>option(v,t,reportKind)).join('')}</select></label><div class="button-row"><button class="primary" data-action="build-report">更新預覽</button><button data-action="print">系統列印／另存 PDF</button><button data-action="download-pdf">下載影像式 PDF</button><button data-action="export">匯出完整案件檔</button></div><label class="check-field"><input id="includeRaw" type="checkbox"${includeRaw?' checked':''}>附原始讀數表與更正紀錄</label><label class="check-field"><input id="includePhotos" type="checkbox"${includePhotos?' checked':''}>完整附件包含點位照片</label><label class="check-field"><input id="includeMap" type="checkbox"${includeMap?' checked':''}>完整附件包含佈設圖（有底圖時）</label><p class="hint">系統列印保留向量圖及可選取文字；直接下載 PDF 為影像式。輸出期間請保持此分頁開啟。</p><div id="reportWarnings"></div></section><div id="reportRoot" class="report-pages"></div>`;
+    `<section class="card report-controls"><label class="field"><span>輸出內容</span><select id="reportKind">${[['all','完整附件（成果＋勾選項目）'],['results','成果表'],['photos','點位照片'],['map','測點佈設圖']].map(([v,t])=>option(v,t,reportKind)).join('')}</select></label><div class="button-row"><button class="primary" data-action="build-report">更新預覽</button><button data-action="print">系統列印／另存 PDF</button><button data-action="download-pdf">下載影像式 PDF</button><button data-action="export">匯出完整案件檔</button></div><label class="check-field"><input id="includeRaw" type="checkbox"${includeRaw?' checked':''}>附原始讀數表與更正紀錄</label><label class="check-field"><input id="includePhotos" type="checkbox"${includePhotos?' checked':''}>完整附件包含點位照片</label><label class="check-field"><input id="includeMap" type="checkbox"${includeMap?' checked':''}>完整附件包含佈設圖（有底圖時）</label><p class="hint">系統列印保留向量圖及可選取文字；直接下載 PDF 為影像式。輸出期間請保持此分頁開啟。</p><div id="reportWarnings"></div></section><div id="reportRoot" class="report-pages"></div>`+mobileCaseActions();
 }
 function updateResults(){const pair=project.pairs.find(p=>p.id===selectedPair);if(tab==='readings'&&pair){$('#liveResults').innerHTML=resultView(pair);$('#confirmState').textContent=isConfirmed(pair,project.facades.find(f=>f.id===pair.facadeId))?'本組讀數已確認':'本組有待確認的讀數';}}
 function render(){
-  mediaUI.dispose();reportGeneration++;
+  desktopActions.append(shareButton);mediaUI.dispose();reportGeneration++;
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   workspace.innerHTML=({case:caseView,facades:facadeView,readings:readingsView,photos:mediaUI.photosView,map:mediaUI.mapView,reports:reportView}[tab])();
+  positionCaseActions();updateCaseSummary();
+  const active=$('.sidebar nav button.active'),nav=$('.sidebar nav');if(mobileLayout.matches)nav.scrollLeft=active.offsetLeft-nav.offsetLeft-(nav.clientWidth-active.clientWidth)/2;
   updateResults();if(tab==='reports')buildReport();else mediaUI.mount(tab);
 }
 function resizeReports(){const root=$('#reportRoot');if(root)root.style.setProperty('--report-scale',Math.min(1,root.clientWidth/(210*96/25.4)));}
