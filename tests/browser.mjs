@@ -1,4 +1,5 @@
 import {VERSION} from '../model.js';
+import {fieldControl} from './controls.mjs';
 import {poll,reportReady} from './poll.mjs';
 import {chromium} from 'playwright';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import {fileURLToPath} from 'node:url';import {startServer} from '../serve.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),output=path.join(root,'output','playwright');await fs.mkdir(output,{recursive:true});
@@ -7,10 +8,19 @@ const browser=await chromium.launch({channel:process.platform==='win32'?'chrome'
 const context=await browser.newContext({viewport:{width:1280,height:1000},acceptDownloads:true});const page=await context.newPage(),errors=[],checks=[];
 page.on('pageerror',e=>errors.push(e.message));
 const pass=name=>{checks.push(name);process.stdout.write(`PASS ${name}\n`);};
-const field=path=>page.locator(`[data-field="${path}"]`);
+const field=path=>fieldControl(page,path);
 const action=name=>page.locator(`[data-action="${name}"]`).first().click();
 const tab=name=>page.locator(`[data-tab="${name}"]`).click();
 const confirmDialog=text=>page.locator('#actionDialog').getByRole('button',{name:text,exact:true}).click();
+async function switchMode(path,value){
+  const previous=await field(path).elementHandle();
+  await field(path).selectOption(value);await confirmDialog('切換並保留原讀數');
+  // The native dialog close event completes the asynchronous change handler.
+  // Wait for its render before selecting again, rather than racing the old select.
+  await page.waitForFunction(element=>!element.isConnected,previous);
+  await poll(page,async()=>assert.equal(await field(path).inputValue(),value));
+  await previous.dispose();
+}
 async function enter(values){for(const [key,value]of Object.entries(values))await field(key).fill(value);}
 async function preview(){await tab('reports');await reportReady(page);await page.locator('.result-sheet').first().waitFor();}
 try {
@@ -36,7 +46,7 @@ try {
   await tab('facades');await field('facades.0.baseline.method').selectOption('azimuth');await field('facades.0.baseline.azimuthDeg').fill('90');await tab('readings');await action('add-pair');await field('pairs.3.mode').selectOption('C');
   await enter({'pairs.3.C.rounds.0.tb.N':'100.000','pairs.3.C.rounds.0.tb.E':'200.000','pairs.3.C.rounds.0.tb.Z':'10.000','pairs.3.C.rounds.0.tp.N':'100.029','pairs.3.C.rounds.0.tp.E':'200.023','pairs.3.C.rounds.0.tp.Z':'14.865'});
   await action('confirm');await preview();await poll(page,async()=>assert.equal(await page.locator('.result-sheet').count(),2));await poll(page,async()=>assert.match(await page.locator('.raw-sheet').last().innerText(),/1／131/));await poll(page,async()=>assert.doesNotMatch(await page.locator('.result-sheet').last().innerText(),/1／131/));pass('模式 C 共用座標得兩向，合成值僅在原始表，4 組分 2 頁');
-  await tab('readings');await field('pairs.3.mode').selectOption('A');await confirmDialog('切換並保留原讀數');await field('pairs.3.mode').selectOption('C');await confirmDialog('切換並保留原讀數');await poll(page,async()=>assert.equal(await field('pairs.3.C.rounds.0.tp.E').inputValue(),'200.023'));pass('切換模式保留既有座標');
+  await tab('readings');await switchMode('pairs.3.mode','A');await switchMode('pairs.3.mode','C');await poll(page,async()=>assert.equal(await field('pairs.3.C.rounds.0.tp.E').inputValue(),'200.023'));pass('切換模式保留既有座標');
   const downloadPromise=page.waitForEvent('download');await action('export');const download=await downloadPromise;const backup=path.join(output,'synthetic-case.tiltsurvey');await download.saveAs(backup);const exported=JSON.parse(await fs.readFile(backup,'utf8'));await poll(page,async()=>assert.equal(exported.format,'tilt-survey-case.v1'));await poll(page,async()=>assert.equal(exported.project.pairs[3].C.rounds[0].tp.N,'100.029'));await poll(page,async()=>assert.match(await page.locator('#saveStatus').innerText(),/已匯出/));
   await page.locator('#importFile').setInputFiles(backup);await confirmDialog('直接取代');await preview();await poll(page,async()=>assert.equal(await page.locator('.result-sheet').count(),2));pass('完整案件檔下載／再匯入，原始字串與成果一致');
   await page.reload();await page.locator('[data-tab="readings"]').waitFor();await tab('readings');await poll(page,async()=>assert.equal(await page.locator('.pair-list button[data-pair]').count(),4));pass('IndexedDB 本機保存，重新整理後 4 組資料仍存在');

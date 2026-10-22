@@ -46,3 +46,8 @@ test('無版本舊檔沿用組設定，當版混合與沿用設定往返不變',
  const legacy=sampleProject();delete legacy.appVersion;legacy.pairs[0].inPlane.mode='B';assert.equal(normalizeProject(legacy).pairs[0].inPlane.mode,'A');
  for(const mode of ['','A','B','C']){const p=sampleProject();p.pairs[0].inPlane.mode=mode;p.pairs[0].outPlane.mode='B';const q=parseBackup(JSON.stringify(await makeBackup(p))).project;assert.equal(q.pairs[0].inPlane.mode,mode);assert.equal(q.pairs[0].outPlane.mode,'B');}
 });
+test('實際 V0.4.0 分向案件與 V0.2 結構相容檔可讀取，成果與確認不變',async()=>{
+ const ref='b36e2b4405af2aa3db9ebdb030ac98468f467cc4',old=await load(ref,'model.js'),calc=await load(ref,'calc.js'),p=old.sampleProject(),pair=p.pairs[0],f=p.facades[0];pair.outPlane.mode='B';pair.outPlane.B.rounds=[{tp:{HD:'12.374',VD:'6.215'},tb:{HD:'12.345',VD:'1.350'}}];old.confirmObservation(p,pair,f,'混合方式合成案例');
+ const q=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]})).project;for(let i=0;i<p.pairs.length;i++){assert.deepEqual(calculatePair(q.pairs[i],q.facades[0],q.settings),calc.calculatePair(p.pairs[i],f,p.settings));assert.deepEqual(q.pairs[i].confirmed,p.pairs[i].confirmed);assert.equal(isConfirmed(q.pairs[i],q.facades[0]),true);}assert.equal(q.pairs[0].outPlane.mode,'B');
+ const legacy=await load('b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc','model.js'),v2=legacy.sampleProject();v2.appVersion='0.2.0';const restored=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:v2,media:[]})).project;assert.equal(isConfirmed(restored.pairs[0],restored.facades[0]),true);assert.equal(calculatePair(restored.pairs[0],restored.facades[0]).inPlane.denominator,212);
+});
