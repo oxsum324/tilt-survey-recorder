@@ -48,3 +48,4 @@
 }
 
 @media screen and (max-width:640px){.section-heading h2{font-size:20px}main{padding-top:4px}.section-heading{margin-bottom:0}html.sunlight .section-heading{min-height:48px}html.sunlight summary{min-height:48px}}
+@media screen{html.sunlight .sidebar nav button span{color:inherit}}
