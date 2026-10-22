@@ -1,4 +1,5 @@
 import {VERSION} from '../model.js';
+import {fieldControl} from './controls.mjs';
 import {poll,reportReady} from './poll.mjs';
 import {chromium} from 'playwright';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import path from 'node:path';import {fileURLToPath} from 'node:url';import {startServer} from '../serve.mjs';
 const root=fileURLToPath(new URL('../',import.meta.url)),output=path.join(root,'output','playwright');await fs.mkdir(output,{recursive:true});
@@ -7,7 +8,7 @@ const browser=await chromium.launch({channel:process.platform==='win32'?'chrome'
 const context=await browser.newContext({viewport:{width:1280,height:1000},acceptDownloads:true});const page=await context.newPage(),errors=[],checks=[];
 page.on('pageerror',e=>errors.push(e.message));
 const pass=name=>{checks.push(name);process.stdout.write(`PASS ${name}\n`);};
-const field=path=>page.locator(`[data-field="${path}"]`);
+const field=path=>fieldControl(page,path);
 const action=name=>page.locator(`[data-action="${name}"]`).first().click();
 const tab=name=>page.locator(`[data-tab="${name}"]`).click();
 const confirmDialog=text=>page.locator('#actionDialog').getByRole('button',{name:text,exact:true}).click();

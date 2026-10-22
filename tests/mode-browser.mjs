@@ -1,6 +1,6 @@
-import {chromium} from 'playwright';import assert from 'node:assert/strict';import {startServer} from '../serve.mjs';import {poll,reportReady} from './poll.mjs';
+import {chromium} from 'playwright';import assert from 'node:assert/strict';import {startServer} from '../serve.mjs';import {poll,reportReady} from './poll.mjs';import {fieldControl} from './controls.mjs';
 const server=await startServer(),base=`http://127.0.0.1:${server.address().port}`,browser=await chromium.launch({channel:process.platform==='win32'?'chrome':undefined,headless:true}),page=await browser.newPage({viewport:{width:390,height:900}});
-const field=p=>page.locator(`[data-field="${p}"]`),button=n=>page.locator(`[data-action="${n}"]`).first();
+const field=p=>fieldControl(page,p),button=n=>page.locator(`[data-action="${n}"]`).first();
 try{
  await page.goto(base);await button('sample').click();await page.getByRole('button',{name:'直接取代',exact:true}).click();await page.locator('[data-tab="readings"]').click();await field('pairs.0.outPlane.mode').selectOption('B');await page.getByRole('button',{name:'切換並保留原讀數',exact:true}).click();
  for(const [key,value]of Object.entries({'tp.HD':'12.374','tb.HD':'12.345','tp.VD':'6.215','tb.VD':'1.350'}))await field('pairs.0.outPlane.B.rounds.0.'+key).fill(value);
