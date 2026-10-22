@@ -9,7 +9,7 @@ export function createMediaUI(api){
   let selectedPhoto=null,annotator=null,plan=null,urls=[],generation=0,tool='callout',tone='red',mapMode='place',busy=false;
   const $=s=>document.querySelector(s),project=()=>api.project(),pair=()=>project().pairs.find(p=>p.id===api.selectedPair()),photo=()=>pair()?.photos.find(p=>p.id===selectedPhoto);
   function dispose(){generation++;annotator?.dispose();plan?.dispose();annotator=null;plan=null;urls.forEach(URL.revokeObjectURL);urls=[];}
-  const pairBar=()=>`<div class="card selector-card button-row pair-list">${project().pairs.map(p=>`<button data-pair="${p.id}" class="${p.id===api.selectedPair()?'primary':''}">測點組 ${p.index} · ${p.photos.length} 張${p.mapMarker?' · 已標位置':''}</button>`).join('')}<button data-action="add-pair">＋新增測點組</button></div>`;
+  const pairBar=()=>`<div class="button-row pair-list">${project().pairs.map(p=>`<button data-pair="${p.id}" class="${p.id===api.selectedPair()?'primary':''}">測點組 ${p.index} · ${p.photos.length} 張${p.mapMarker?' · 已標位置':''}</button>`).join('')}<button data-action="add-pair">＋新增測點組</button></div>`;
   function photosView(){
     const p=pair();if(!p)return pairBar()+'<section class="card">請先新增測點組。</section>';
     if(!p.photos.some(p=>p.id===selectedPhoto))selectedPhoto=p.photos[0]?.id;

@@ -11,6 +11,7 @@ import {downloadBlob} from './media.js';
 let project,tab='case',selectedPair,selectedFacade,includeRaw=true,includePhotos=true,includeMap=true,reportKind='all',reportPromise=Promise.resolve(),reportGeneration=0,saveTimer,saving=Promise.resolve(),failedSave=false,storageBlocked=false,reportStale=true;
 let preparedShare=null,shareGeneration=0,sharing=false;
 let resultsExpanded=false;
+const exportActionTimes=new Map(),exportActionKey=id=>`tilt-survey-exported-at:${id}`;
 const $=selector=>document.querySelector(selector),workspace=$('#workspace'),shareButton=$('#shareCaseButton'),desktopActions=$('#desktopCaseActions'),mobileLayout=matchMedia('(max-width:640px)');
 const option=(value,text,current)=>`<option value="${value}"${value===current?' selected':''}>${text}</option>`;
 function input(label,path,value,{unit='',signed=false,placeholder='',type='text',numeric=true}={}) {
@@ -43,16 +44,28 @@ function heading(eyebrow,title,text){const short={'案件設定':'案件與表�
 function mobileCaseActions(){return `<section class="card mobile-case-actions" aria-label="案件檔案操作"><h3>案件檔案與備份</h3><div class="button-row"><button data-action="export">匯出案件檔</button><button data-action="import">匯入案件檔</button><button data-action="verify-file">驗證案件檔指紋</button><span class="share-slot"></span></div><p class="hint">不同裝置不會同步；離開現場前請確認完整案件檔已保存。</p></section>`;}
 function updateCaseSummary(){
   const completed=project.pairs.reduce((n,p)=>{const f=project.facades.find(f=>f.id===p.facadeId);if(!f||!isConfirmed(p,f))return n;const r=calculatePair(p,f,project.settings);return n+['inPlane','outPlane'].filter(axis=>r[axis].status==='ok').length;},0);
-  const time=project.lastExportedAt?new Date(project.lastExportedAt).toLocaleString('zh-TW',{hour12:false}):'尚未匯出';
-  $('#caseSummary').innerHTML=`<h3>案件摘要</h3><dl><dt>案件名稱</dt><dd>${esc(project.header.caseNumber||'未命名案件')}</dd><dt>測點組數</dt><dd>${project.pairs.length} 組</dd><dt>已完成方向數</dt><dd>${completed}／${project.pairs.length*2}（已確認且可計算）</dd><dt>上次匯出時間</dt><dd>${esc(time)}</dd></dl>`;
+  let exportedAt=exportActionTimes.get(project.id);try{exportedAt ||=localStorage.getItem(exportActionKey(project.id));}catch{}
+  const known=exportedAt&&Number.isFinite(Date.parse(exportedAt)),time=known?new Date(exportedAt).toLocaleString('zh-TW',{hour12:false}):project.lastExportedAt?'未記錄（案件已有匯出標記）':'尚未匯出';
+  $('#caseSummary').innerHTML=`<h3>案件摘要</h3><dl><dt>案件名稱</dt><dd>${esc(project.header.caseNumber||'未命名案件')}</dd><dt>測點組數</dt><dd>${project.pairs.length} 組</dd><dt>已完成方向數</dt><dd>${completed}／${project.pairs.length*2}（已確認且可計算）</dd><dt>上次匯出時間（本機）</dt><dd><time id="lastExportActionTime"${known?` datetime="${esc(exportedAt)}"`:''}>${esc(time)}</time></dd></dl>`;
 }
 function positionCaseActions(){
   desktopActions.append(shareButton);const slot=workspace.querySelector('.share-slot');if(mobileLayout.matches&&slot)slot.append(shareButton);
+}
+function positionSelectors(){
+  const heading=workspace.querySelector('.section-heading'),list=workspace.querySelector('.pair-list,.facade-list');if(!heading||!list)return;
+  const previous=workspace.querySelector('.page-selector');
+  if(!mobileLayout.matches){if(previous){heading.after(list);previous.remove();}return;}
+  const summary=previous?.querySelector('summary')||document.createElement('summary'),current=[...list.querySelectorAll('button')].find(b=>b.dataset.pair&&b.dataset.pair===selectedPair||b.dataset.facade&&b.dataset.facade===selectedFacade);
+  summary.textContent=(current?.textContent||'選擇測點').replace(' ✓','');summary.title=summary.textContent;summary.setAttribute('aria-label',`切換${summary.textContent}`);
+  if(previous)return;
+  const picker=document.createElement('details');picker.className='page-selector';
+  picker.append(summary,list);heading.append(picker);
 }
 function responsiveChrome(){
   $('#statusPanel').open=!mobileLayout.matches;
   const noticeBox=$('#notice');if(mobileLayout.matches)$('#mobileNoticeSlot').append(noticeBox);else $('#main').prepend(noticeBox);
   positionCaseActions();
+  positionSelectors();
 }
 mobileLayout.addEventListener('change',responsiveChrome);responsiveChrome();
 function caseView(){
@@ -66,7 +79,7 @@ function caseView(){
 function facadeView(){
   const index=project.facades.findIndex(f=>f.id===selectedFacade);const f=project.facades[index],prefix=`facades.${index}`;
   return heading('立面示意','用立面參數描述測線位置','參數只供圖面示意；量測垂距 H 仍取自原始讀數。')+
-    `<div class="card selector-card button-row facade-list">${project.facades.map(f=>`<button data-facade="${f.id}" class="${f.id===selectedFacade?'primary':''}">${esc(f.name)}</button>`).join('')}<button data-action="add-facade">＋新增立面</button></div>
+    `<div class="button-row facade-list">${project.facades.map(f=>`<button data-facade="${f.id}" class="${f.id===selectedFacade?'primary':''}">${esc(f.name)}</button>`).join('')}<button data-action="add-facade">＋新增立面</button></div>
     <section class="card"><h3>立面資料</h3><div class="form-grid">${input('立面名稱',`${prefix}.name`,f.name,{numeric:false})}${input('外法線朝向（北＝0，順時針）',`${prefix}.facingDeg`,f.facingDeg,{unit:'度',placeholder:'選填，0 至小於 360'})}${input('立面寬',`${prefix}.building.widthCm`,f.building.widthCm,{unit:'cm'})}${input('側立面繪製長度',`${prefix}.building.sideShownCm`,f.building.sideShownCm,{unit:'cm'})}${input('女兒牆高度',`${prefix}.building.parapetCm`,f.building.parapetCm,{unit:'cm'})}${select('一樓開口形式',`${prefix}.building.groundFloorType`,f.building.groundFloorType,[['shop','店面'],['house','住宅'],['blank','不畫開口']])}</div>${check('繪製開口示意',`${prefix}.building.showOpenings`,f.building.showOpenings)}<h4>各樓層樓高（由下而上）</h4><div class="floor-grid">${f.building.floorHeightsCm.map((h,i)=>input(`${i+1}F 樓高`,`${prefix}.building.floorHeightsCm.${i}`,h,{unit:'cm'})).join('')}</div><div class="button-row"><button data-action="add-floor">＋新增樓層</button><button data-action="remove-floor" ${f.building.floorHeightsCm.length===1?'disabled':''}>移除頂層</button></div><p class="hint">預設樓高及寬度均可調整；TB 離地高度未量測時，圖面會明確註記。</p></section>
     <section class="card"><h3>模式 C 的立面基準</h3><p>兩點法由面向立面的左端 A 指向右端 B；方位角也是由左至右方向。</p>${select('基準方式',`${prefix}.baseline.method`,f.baseline.method,[['none','尚未設定'],['twoPoints','兩點法（A 左、B 右）'],['azimuth','方位角法']])}<div class="form-grid">${f.baseline.method==='twoPoints'?['A','B'].map(pos=>['N','E'].map(key=>input(`${pos}（${pos==='A'?'左端':'右端'}）${key}（${key==='N'?'北':'東'}）`,`${prefix}.baseline.${pos}.${key}`,f.baseline[pos][key],{unit:'m',signed:true})).join('')).join(''):f.baseline.method==='azimuth'?input('由左至右方位角 α',`${prefix}.baseline.azimuthDeg`,f.baseline.azimuthDeg,{unit:'度'}):''}</div><p class="hint">儀器 X／Y 軸與 N／E 的對應仍須依實際儀器確認。</p></section>`;
 }
@@ -97,7 +110,7 @@ function directionForm(pair,index,axis){
 }
 function readingsView(){
   const index=project.pairs.findIndex(p=>p.id===selectedPair),pair=project.pairs[index],uses=mode=>pair&&['inPlane','outPlane'].some(axis=>modeFor(pair,axis)===mode);
-  let content=heading('現場讀數','先確認測點，再記錄兩個方向','方向基準：站在立面外、面向立面。向後表示頂部朝建物內側。')+`<div class="card selector-card button-row pair-list">${project.pairs.map(p=>`<button data-pair="${p.id}" class="${p.id===selectedPair?'primary':''}">測點組 ${p.index}${isConfirmed(p,project.facades.find(f=>f.id===p.facadeId))?' ✓':''}</button>`).join('')}<button data-action="add-pair">＋新增測點組</button></div>`;
+  let content=heading('現場讀數','先確認測點，再記錄兩個方向','方向基準：站在立面外、面向立面。向後表示頂部朝建物內側。')+`<div class="button-row pair-list">${project.pairs.map(p=>`<button data-pair="${p.id}" class="${p.id===selectedPair?'primary':''}">測點組 ${p.index}${isConfirmed(p,project.facades.find(f=>f.id===p.facadeId))?' ✓':''}</button>`).join('')}<button data-action="add-pair">＋新增測點組</button></div>`;
   if(!pair)return content+'<section class="card">請新增測點組。</section>';
   const more=`<div class="form-grid more-grid">${select('量測角位置',`pairs.${index}.corner`,pair.corner,[['right','右角'],['left','左角'],['custom','自訂']])}${pair.corner==='custom'?input('測線距立面左端',`pairs.${index}.cornerOffsetCm`,pair.cornerOffsetCm,{unit:'cm'}):''}${input('TB 離地高度',`pairs.${index}.tbHeightCm`,pair.tbHeightCm,{unit:'cm',placeholder:'可留空'})}${input('現場備註',`pairs.${index}.note`,pair.note,{numeric:false})}</div>`;
   content+=`<div id="liveResults" class="live-results" aria-live="polite"></div><section class="card pair-settings" data-pair-card><div class="form-grid">${select('預設作業方式',`pairs.${index}.mode`,pair.mode,[['A','A｜直接偏移量'],['B','B｜水平距與高差'],['C','C｜三維座標']])}${select('所屬立面',`pairs.${index}.facadeId`,pair.facadeId,project.facades.map(f=>[f.id,f.name]))}</div>${uses('A')?`<div class="shared-height-row">${check('兩方向共用垂距 H',`pairs.${index}.sharedH`,pair.sharedH)}${pair.sharedH?input('共用垂距 H',`pairs.${index}.inPlane.A.hCm`,pair.inPlane.A.hCm,{unit:'cm'}):''}</div>`:''}${disclosure(`pair:${pair.id}:more`,'更多設定',moreSummary(pair),more,pair.corner!=='right'||!!pair.tbHeightCm||!!pair.note)}${uses('B')?'<p class="hint">測站應位於待測分量的方向線上；視線斜交時，量得值為視線方向分量。</p>':''}${uses('C')?'<p class="hint">N（北）、E（東）、Z（高程），請先在「立面參數」設定基準。</p>':''}</section>`;
@@ -116,7 +129,7 @@ function render(){
   document.body.classList.toggle('readings-active',tab==='readings');
   document.querySelectorAll('[data-tab]').forEach(b=>b.classList.toggle('active',b.dataset.tab===tab));
   workspace.innerHTML=({case:caseView,facades:facadeView,readings:readingsView,photos:mediaUI.photosView,map:mediaUI.mapView,reports:reportView}[tab])();
-  positionCaseActions();updateCaseSummary();readingKeyboard();
+  positionCaseActions();positionSelectors();updateCaseSummary();readingKeyboard();
   const active=$('.sidebar nav button.active'),nav=$('.sidebar nav');if(mobileLayout.matches)nav.scrollLeft=active.offsetLeft-nav.offsetLeft-(nav.clientWidth-active.clientWidth)/2;
   updateResults();if(tab==='reports')buildReport();else mediaUI.mount(tab);
 }
@@ -144,7 +157,10 @@ async function caseFile(){
   const name=`傾斜測量_${(backupProject.header.caseNumber||'未命名').replace(/[<>:"/\\|?*]/g,'_')}_${new Date().toISOString().slice(0,10)}.tiltsurvey`;
   return {origin,updatedAt:backupProject.updatedAt,file:new File([blob],name,{type:blob.type})};
 }
-async function markExported(data){if(project===data.origin&&project.updatedAt===data.updatedAt){project.lastExportedAt=data.updatedAt;await queueSave();}}
+async function markExported(data){
+  const at=new Date().toISOString();exportActionTimes.set(data.origin.id,at);try{localStorage.setItem(exportActionKey(data.origin.id),at);}catch{}
+  if(project===data.origin){updateCaseSummary();if(project.updatedAt===data.updatedAt){project.lastExportedAt=data.updatedAt;await queueSave();}}
+}
 async function exportCase(){const data=await caseFile();downloadBlob(data.file,data.file.name);await markExported(data);notice('完整案件檔已交由瀏覽器下載，請確認檔案已保存。');}
 async function prepareShare(){
   const job=++shareGeneration,button=$('#shareCaseButton');preparedShare=null;button.disabled=true;button.textContent='正在準備案件檔…';
@@ -205,7 +221,7 @@ async function action(name){
   }else return;
   changed();render();
 }
-const mediaUI=createMediaUI({project:()=>project,selectedPair:()=>selectedPair,selectPair:value=>selectedPair=value,tab:()=>tab,changed,notice,dialog,render,navigate:value=>{tab=value;render();},preview:kind=>{reportKind=kind;tab='reports';render();}});
+const mediaUI=createMediaUI({project:()=>project,selectedPair:()=>selectedPair,selectPair:value=>{selectedPair=value;positionSelectors();},tab:()=>tab,changed,notice,dialog,render,navigate:value=>{tab=value;render();},preview:kind=>{reportKind=kind;tab='reports';render();}});
 setupDisplay();
 document.addEventListener('click',async event=>{
   const b=event.target.closest('button');if(!b||b.closest('#actionDialog'))return;
@@ -247,7 +263,10 @@ $('#importFile').addEventListener('change',async event=>{
   const file=event.target.files[0];event.target.value='';if(!file)return;
   try{if(file.size>250*1024*1024)throw Error('案件檔超過 250 MB');const backup=parseBackup(await file.text());if(await allowReplace('匯入案件檔')){await adopt(backup.project,backup.media);notice('案件檔已匯入。');}}catch(e){notice(`匯入未完成：${e.message}`,true);}
 });
-document.addEventListener('keydown',event=>{if(event.key==='Enter'&&event.target.matches('input[data-field]')){const fields=Array.from(workspace.querySelectorAll('input[data-field]')).filter(e=>e.getClientRects().length);const next=fields[fields.indexOf(event.target)+1];event.preventDefault();if(next)next.focus();else event.target.blur();}});
+document.addEventListener('keydown',event=>{
+  if(tab!=='readings'||event.key!=='Enter'||event.isComposing||event.keyCode===229||event.defaultPrevented||!event.target.matches('input[data-field][inputmode="decimal"]'))return;
+  const fields=Array.from(workspace.querySelectorAll('input[data-field][inputmode="decimal"]')).filter(e=>e.getClientRects().length),next=fields[fields.indexOf(event.target)+1];event.preventDefault();if(next)next.focus();else event.target.blur();
+});
 document.addEventListener('toggle',event=>{const key=event.target.dataset.uiDisclosure;if(!key)return;disclosurePrefs[key]=event.target.open;try{localStorage.setItem(disclosureKey,JSON.stringify(disclosurePrefs));}catch{}readingKeyboard();},true);
 window.addEventListener('resize',()=>{resizeReports();readingKeyboard();});
 new ResizeObserver(([entry])=>document.documentElement.style.setProperty('--app-header-height',`${entry.target.getBoundingClientRect().height}px`)).observe($('.app-header'));
