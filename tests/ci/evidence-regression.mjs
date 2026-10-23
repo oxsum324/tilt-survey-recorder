@@ -35,6 +35,8 @@ for (const id of ['evidence_start', 'evidence_finish', 'artifact_upload']) {
 }
 assert.match(bootstrap, /AppendAllText\(\$env:GITHUB_ENV/);
 assert.match(step('workflow_semantics'), /test:workflow/);
+assert.match(step('browser_diagnostic_regressions'), /run-command\.ps1 -Name browser_diagnostic_regressions/);
+assert.match(step('browser_diagnostic_regressions'), /test:browser-evidence/);
 assert.match(step('evidence_finish'), /if: always\(\)/);
 assert.match(step('artifact_upload'), /if: always\(\)/);
 assert.match(step('artifact_upload'), /\$\{\{ env\.TILT_CI_EVIDENCE_ROOT \}\}\//);

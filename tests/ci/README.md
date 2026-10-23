@@ -67,3 +67,29 @@ action 輸入與依賴圖的內建檢查均保留。它是本機靜態驗證，�
 
 依據：[GitHub context 可用位置](https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability)、
 [actionlint 固定版本](https://github.com/rhysd/actionlint/releases/tag/v1.7.12)。
+
+## 瀏覽器失敗當下診斷
+
+`review-followups-browser.mjs` 的八情境在導覽前開始事件觀測與 Playwright trace。
+任何導覽、等待或既有斷言失敗，都在關閉 context 前保存原例外、URL／DOM 狀態、HTML、
+全頁 PNG、HTTP 回應、console、pageerror、requestfailed 及 trace ZIP，附逐檔 SHA。
+不重試、不修改原 30000 ms 等待或既有斷言；失敗仍拋回同一個原始例外。
+個別診斷寫入失敗明列 captureErrors，不能把「有收據」當成所有附件皆完整；儲存錯誤不取代原失敗。
+成功情境只保存結果與事件收據，trace 丟棄；新 run 名稱避免覆寫舊證據。
+
+```powershell
+npm.cmd run test:browser-evidence
+```
+
+新增五項回歸另計：真實 locator 逾時／畫面與四類事件、截圖寫入失敗、頁面先關閉、成功、
+拒絕覆寫既有失敗。Windows 每項依序使用 Chrome／Edge，共十次驗證；前三項共六個子程序必須 exit 1，測試才通過；500 ms 只用在合成反例，
+不套用到原 101 項測試。CI 在瀏覽器與字型安裝後執行，失敗阻擋後續命令。
+預設輸出 `output/playwright/timeout-regressions/`；`TILT_BROWSER_REGRESSION_ROOT` 可指定全新目錄。
+正式八情境診斷預設 `output/playwright/failure-evidence/<unique-run>/`；
+`TILT_BROWSER_FAILURE_ROOT` 可指定全新父目錄。兩者均納入現有 CI output 附件路徑。
+
+這次只套用於曾發生首頁等待逾時的 review-followups 八情境，不宣稱其他八支腳本已有同等保存。
+trace 記錄瀏覽器操作與網路，不記錄 Node assert 的判定；原例外與命令日誌另外保存。
+本機回歸不代表雲端 CI、GitHub 上傳或第一次歷史逾時根因已驗證。
+runner 硬性終止、瀏覽器無回應或磁碟不可寫仍可能無法完整取證。
+依據：[Playwright tracing](https://playwright.dev/docs/api/class-tracing)。

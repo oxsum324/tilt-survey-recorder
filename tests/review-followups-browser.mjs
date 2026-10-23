@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {startServer} from '../serve.mjs';
 import {poll} from './poll.mjs';
+import {withFailureEvidence} from './browser-failure-evidence.mjs';
 
 const server=await startServer(),base=`http://127.0.0.1:${server.address().port}`,records=[];
 assert.doesNotMatch(await fs.readFile('style.css','utf8'),/html:has\(body\.readings-active\)/);
@@ -25,6 +26,7 @@ try{for(const channel of channels){
   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   const pass=(label,data)=>{records.push({name,label,status:'pass',data});console.log(`PASS ${name}: ${label}`);};
   try{
+   await withFailureEvidence({context,page,name},async()=>{
    await page.goto(base);await page.locator('[data-field="header.caseNumber"]').waitFor();
    await page.evaluate(async()=>{const {sampleProject}=await import('./model.js'),{replaceProject}=await import('./store.js');await replaceProject(sampleProject());});
    await page.reload();await page.locator('[data-tab="readings"]').click();if(bright)await page.locator('#sunlightButton').click();
@@ -43,6 +45,7 @@ try{for(const channel of channels){
    await page.evaluate(()=>window.reviewResultsCallback([{target:window.reviewResultsElement}]));
    await poll(page,async()=>assert.equal(await page.evaluate(()=>!document.documentElement.classList.contains('readings-active')&&!document.body.classList.contains('readings-active')&&document.documentElement.style.getPropertyValue('--live-results-height')===''&&getComputedStyle(document.documentElement).scrollPaddingTop==='auto'),true));
    assert.deepEqual(errors,[]);pass('離開讀數頁後舊觀測回呼不還原留白，無執行例外');
+   });
   }finally{await context.close();}
  }}finally{await browser.close();}
 }}finally{await new Promise(resolve=>server.close(resolve));await fs.mkdir('output/review-followups',{recursive:true});await fs.writeFile('output/review-followups/results.json',JSON.stringify(records,null,2));}

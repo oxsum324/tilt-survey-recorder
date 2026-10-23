@@ -65,6 +65,9 @@ jobs:
       - name: Install verified Traditional Chinese font for PDF checks
         id: font_install
         run: ./tests/ci/run-command.ps1 -Name font_install -Executable ./tests/desktop/install-ci-font.ps1; exit $LASTEXITCODE
+      - name: Regress capture of browser failures before page cleanup
+        id: browser_diagnostic_regressions
+        run: ./tests/ci/run-command.ps1 -Name browser_diagnostic_regressions -Executable npm.cmd -Arguments @('run', 'test:browser-evidence'); exit $LASTEXITCODE
       - name: Regress CI evidence failure scenarios
         id: ci_regressions
         run: ./tests/ci/run-command.ps1 -Name ci_regressions -Executable npm.cmd -Arguments @('run', 'test:ci-evidence'); exit $LASTEXITCODE
