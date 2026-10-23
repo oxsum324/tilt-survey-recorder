@@ -14,43 +14,88 @@ jobs:
   checks:
     runs-on: windows-latest
     timeout-minutes: 30
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      TILT_CI_EVIDENCE_ROOT: ${{ runner.temp }}/tilt-ci-${{ github.run_id }}-${{ github.run_attempt }}
+      TILT_CI_EVIDENCE_SCOPE: github-actions
     steps:
+      - name: Initialize evidence before checkout or installation
+        id: evidence_start
+        run: |
+          # BEGIN_CI_EVIDENCE_BOOTSTRAP
+          $ErrorActionPreference = 'Stop'
+          $root = $env:TILT_CI_EVIDENCE_ROOT
+          if (Test-Path -LiteralPath $root) { throw 'Preserve previous CI evidence' }
+          New-Item -ItemType Directory -Path $root | Out-Null
+          $record = [ordered]@{ scope = $env:TILT_CI_EVIDENCE_SCOPE; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID; attempt = $env:GITHUB_RUN_ATTEMPT; startedUtc = [DateTime]::UtcNow.ToString('o'); state = 'initialized' }
+          [IO.File]::WriteAllText((Join-Path $root 'bootstrap.json'), ($record | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+          # END_CI_EVIDENCE_BOOTSTRAP
       - uses: actions/checkout@v6
+        id: checkout
       - uses: actions/setup-node@v4
+        id: node_setup
         with:
           node-version: '22'
           cache: npm
       - uses: actions/setup-python@v5
+        id: python_setup
         with:
           python-version: '3.12'
           cache: pip
           cache-dependency-path: tests/desktop/requirements.txt
-      - run: npm ci --ignore-scripts
-      - run: python -m pip install -r tests/desktop/requirements.txt
-      - run: npx playwright install chrome msedge
+      - name: Install npm dependencies with evidence
+        id: npm_install
+        run: ./tests/ci/run-command.ps1 -Name npm_install -Executable npm.cmd -Arguments @('ci', '--ignore-scripts'); exit $LASTEXITCODE
+      - name: Install Python dependencies with evidence
+        id: python_install
+        run: ./tests/ci/run-command.ps1 -Name python_install -Executable python -Arguments @('-m', 'pip', 'install', '-r', 'tests/desktop/requirements.txt'); exit $LASTEXITCODE
+      - name: Install both browsers with evidence
+        id: browser_install
+        run: ./tests/ci/run-command.ps1 -Name browser_install -Executable npx.cmd -Arguments @('playwright', 'install', 'chrome', 'msedge'); exit $LASTEXITCODE
       - name: Install verified Traditional Chinese font for PDF checks
-        run: ./tests/desktop/install-ci-font.ps1
+        id: font_install
+        run: ./tests/ci/run-command.ps1 -Name font_install -Executable ./tests/desktop/install-ci-font.ps1; exit $LASTEXITCODE
+      - name: Regress CI evidence failure scenarios
+        id: ci_regressions
+        run: ./tests/ci/run-command.ps1 -Name ci_regressions -Executable npm.cmd -Arguments @('run', 'test:ci-evidence'); exit $LASTEXITCODE
       - name: Data tests (92)
-        run: |
-          New-Item -ItemType Directory -Force output/ci | Out-Null
-          npm test 2>&1 | Tee-Object -FilePath output/ci/data.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        id: data
+        run: ./tests/ci/run-command.ps1 -Name data -Executable npm.cmd -Arguments @('test'); exit $LASTEXITCODE
       - name: Existing browser tests (101)
-        run: |
-          npm run test:browser 2>&1 | Tee-Object -FilePath output/ci/browser.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        id: browser
+        run: ./tests/ci/run-command.ps1 -Name browser -Executable npm.cmd -Arguments @('run', 'test:browser'); exit $LASTEXITCODE
       - name: Build local site at the tested commit
-        run: node build-site.mjs
+        id: site_build
+        run: ./tests/ci/run-command.ps1 -Name site_build -Executable node -Arguments @('build-site.mjs'); exit $LASTEXITCODE
       - name: Chrome and Edge desktop matrix (8 scenarios, 80 grouped checks)
+        id: desktop
+        run: ./tests/ci/run-command.ps1 -Name desktop -Executable npm.cmd -Arguments @('run', 'test:desktop', '--', 'ci-${{ github.run_id }}-${{ github.run_attempt }}'); exit $LASTEXITCODE
+      - name: Finalize evidence even when checkout or setup failed
+        id: evidence_finish
+        if: always()
+        env:
+          TILT_CI_STEPS: ${{ toJSON(steps) }}
         run: |
-          npm run test:desktop -- ci-${{ github.run_id }}-${{ github.run_attempt }} 2>&1 | Tee-Object -FilePath output/ci/desktop.log
-          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # BEGIN_CI_EVIDENCE_FINALIZE
+          $ErrorActionPreference = 'Stop'
+          $root = [IO.Path]::GetFullPath($env:TILT_CI_EVIDENCE_ROOT).TrimEnd([char[]]'\/')
+          New-Item -ItemType Directory -Path $root -Force | Out-Null
+          $steps = $env:TILT_CI_STEPS | ConvertFrom-Json
+          $summary = [ordered]@{ scope = $env:TILT_CI_EVIDENCE_SCOPE; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID; attempt = $env:GITHUB_RUN_ATTEMPT; finishedUtc = [DateTime]::UtcNow.ToString('o'); bootstrapPresent = (Test-Path -LiteralPath (Join-Path $root 'bootstrap.json')); steps = $steps; artifactUpload = 'Not executed yet; consult the GitHub job for upload status' }
+          [IO.File]::WriteAllText((Join-Path $root 'summary.json'), ($summary | ConvertTo-Json -Depth 12), [Text.UTF8Encoding]::new($false))
+          $files = @(Get-ChildItem -LiteralPath $root -Recurse -File | Where-Object { $_.Name -ne 'sha256.json' } | ForEach-Object { [ordered]@{ file = $_.FullName.Substring($root.Length + 1).Replace('\', '/'); bytes = $_.Length; sha256 = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() } })
+          [IO.File]::WriteAllText((Join-Path $root 'sha256.json'), (ConvertTo-Json -InputObject $files -Depth 8), [Text.UTF8Encoding]::new($false))
+          # END_CI_EVIDENCE_FINALIZE
       - name: Preserve test evidence including failed attempts
+        id: artifact_upload
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tilt-tests-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
+            ${{ env.TILT_CI_EVIDENCE_ROOT }}/
             output/
             test-results/
             _site/deploy-manifest.json
