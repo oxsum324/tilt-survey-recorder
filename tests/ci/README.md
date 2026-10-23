@@ -24,17 +24,18 @@ npm.cmd run test:ci-evidence -- local-01
 可用 `TILT_CI_POWERSHELL` 指定 pwsh，`TILT_CI_REGRESSION_OUTPUT_ROOT` 指定新的證據父目錄。
 輸出預設 `output/ci-evidence-regressions/<run>/`，既有名稱不覆寫。
 
-十個情境實際執行 workflow 內的 bootstrap／收尾 PowerShell 及同一個命令 wrapper：
+十一個情境實際執行 workflow 內的 bootstrap／收尾 PowerShell 及同一個命令 wrapper：
 
 - 成功且原生命令有 stderr，仍依 exit 0 成功。
 - npm、Python、瀏覽器三個安裝位置以替代命令注入 exit 47；字型位置注入 PowerShell throw。
 - 模擬 checkout、setup-node、setup-python 的 failure 狀態，完全沒有安裝輸出時仍產生附件。
 - 執行檔不存在時，不能沿用前一個 exit 0。
+- PATH 含兩個同名執行檔時，依既定順序只選第一個，不把多個路徑合成無效命令。
 - 重複初始化拒絕覆寫既有 bootstrap。
 
 每個情境驗證原始失敗碼、後續步驟跳過、日誌／收據與 SHA，並實際封裝 ZIP 核對必要項目。
 模擬清除工作目錄中的暫存檔，另確認 runner 暫存證據仍存在。
-這十個情境另計，不加入原本 92、101 或八情境 80 組測試。
+這十一個情境另計，不加入原本 92、101 或八情境 80 組測試。
 
 所有回歸輸出標為 `local-fault-injection`。模擬 setup action 的步驟狀態不等於本機執行了
 GitHub action；本機 ZIP 也不等於 GitHub 已上傳 artifact。真實雲端執行與上傳仍待授權推送後驗證。

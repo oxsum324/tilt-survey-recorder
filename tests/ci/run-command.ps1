@@ -34,7 +34,7 @@ $record = [ordered]@{
 $code = 1
 try {
   # Resolve before invocation so a missing command cannot leave LASTEXITCODE at zero.
-  $command = Get-Command $Executable -CommandType Application, ExternalScript -ErrorAction Stop
+  $command = Get-Command $Executable -CommandType Application, ExternalScript -ErrorAction Stop | Select-Object -First 1
   $global:LASTEXITCODE = 0
   # Native stderr belongs in the evidence; it must not abort capture before the exit code.
   $ErrorActionPreference = 'Continue'

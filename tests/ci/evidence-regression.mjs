@@ -76,6 +76,7 @@ const cases = [
   ...installs.map(fail => ({name: `failed-${fail}`, fail})),
   ...['checkout', 'node_setup', 'python_setup'].map(action => ({name: `failed-${action}`, action})),
   {name: 'missing-executable', missing: true},
+  {name: 'duplicate-path-resolves-first-command', ambiguous: true},
   {name: 'existing-evidence-is-preserved', repeat: true},
 ];
 try {
@@ -116,6 +117,15 @@ try {
         await fs.writeFile(executable, `Write-Output 'font stdout';${expectedCode ? "throw 'injected font installation failure'" : ''}\n`);
       }
       if (test.missing) { executable = path.join(workspace, 'missing-command.exe'); args = []; }
+      if (test.ambiguous && name === 'npm_install') {
+        const firstPath = path.join(workspace, 'first-path'), secondPath = path.join(workspace, 'second-path');
+        await fs.mkdir(firstPath); await fs.mkdir(secondPath);
+        await fs.writeFile(path.join(firstPath, 'ambiguous-install.cmd'), `@"${process.execPath}" "${fixture}" %*\r\n@exit /b %errorlevel%\r\n`);
+        await fs.writeFile(path.join(secondPath, 'ambiguous-install.cmd'), '@echo wrong PATH entry\r\n@exit /b 99\r\n');
+        env.PATH = firstPath + path.delimiter + secondPath + path.delimiter + process.env.PATH;
+        executable = 'ambiguous-install.cmd'; args = [name, '0'];
+        assert.equal(await ps("if (@(Get-Command ambiguous-install.cmd -CommandType Application,ExternalScript).Count -lt 2) { exit 1 }", workspace, env, path.join(dir, 'path-ambiguity-proof.log')), 0);
+      }
       // Match the explicit workflow exit, rather than pwsh -Command normalizing nonzero to 1.
       const script = `& ${quote(wrapper)} -Name ${quote(name)} -Executable ${quote(executable)} -Arguments @(${args.map(quote).join(',')}); exit $LASTEXITCODE`;
       const code = await ps(script, workspace, env, path.join(dir, `${name}-host.log`));
@@ -170,7 +180,7 @@ try {
     console.log(`PASS CI evidence: ${test.name}`);
     await fs.writeFile(path.join(out, 'results.json'), JSON.stringify({head, scope: 'local-fault-injection', cases: results}, null, 2));
   }
-  assert.equal(results.length, 10);
+  assert.equal(results.length, 11);
 } finally {
   const files = [];
   const collect = async dir => {

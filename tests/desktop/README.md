@@ -46,7 +46,7 @@ npm.cmd run test:desktop -- local-01
 `.github/workflows/pages.yml` 在分支推送、對 main 的 PR 及手動執行時先跑 Windows checks。
 安裝兩瀏覽器及固定 PyMuPDF，依序執行上述三組測試。任何安裝前先在 runner 暫存區建立證據，
 前置命令保存日誌／原始結束碼；失敗也彙整步驟狀態並上傳暫存證據、`output/`、`test-results/`
-與可用建置清冊，保留 30 天。前置失敗的十情境回歸與限制見 [../ci/README.md](../ci/README.md)。
+與可用建置清冊，保留 30 天。前置失敗的十一情境回歸與限制見 [../ci/README.md](../ci/README.md)。
 需要長期稽核時仍應下載封存。
 只有 main 且 checks 通過後，才執行既有公開建置及 Pages 部署；PR／其他分支只跑檢查。
 
