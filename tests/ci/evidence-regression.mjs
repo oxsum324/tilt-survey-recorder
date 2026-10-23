@@ -29,6 +29,12 @@ const ids = steps.map(s => s.match(/^        id: (\w+)$/m)?.[1]).filter(Boolean)
 assert.equal(ids[0], 'evidence_start');
 assert.ok(ids.indexOf('evidence_start') < ids.indexOf('checkout'));
 assert.match(checks, /TILT_CI_EVIDENCE_ROOT: \$\{\{ runner\.temp \}\}/);
+assert.doesNotMatch(checks.split('    steps:\n')[0], /\$\{\{\s*runner[.\[]/);
+for (const id of ['evidence_start', 'evidence_finish', 'artifact_upload']) {
+  assert.match(step(id), /        env:\n          TILT_CI_EVIDENCE_ROOT: \$\{\{ runner\.temp \}\}/);
+}
+assert.match(bootstrap, /AppendAllText\(\$env:GITHUB_ENV/);
+assert.match(step('workflow_semantics'), /test:workflow/);
 assert.match(step('evidence_finish'), /if: always\(\)/);
 assert.match(step('artifact_upload'), /if: always\(\)/);
 assert.match(step('artifact_upload'), /\$\{\{ env\.TILT_CI_EVIDENCE_ROOT \}\}\//);
@@ -86,11 +92,13 @@ try {
     assert.ok(!evidence.startsWith(workspace + path.sep), 'Evidence must survive checkout cleanup');
     const env = {...process.env, TILT_CI_EVIDENCE_ROOT: evidence,
       TILT_CI_EVIDENCE_SCOPE: 'local-fault-injection', GITHUB_SHA: head,
+      GITHUB_ENV: path.join(dir, 'github-env'),
       GITHUB_RUN_ID: 'local-regression', GITHUB_RUN_ATTEMPT: '1'};
     const states = Object.fromEntries(ids.filter(s => !['evidence_finish', 'artifact_upload'].includes(s))
       .map(id => [id, {outcome: 'skipped', conclusion: 'skipped'}]));
     const state = (id, value) => { states[id] = {outcome: value, conclusion: value}; };
     assert.equal(await ps(bootstrap, workspace, env, path.join(dir, 'bootstrap.log')), 0);
+    assert.equal((await fs.readFile(env.GITHUB_ENV, 'utf8')).trim(), `TILT_CI_EVIDENCE_ROOT=${evidence}`);
     state('evidence_start', 'success');
     const originalBootstrap = digest(await fs.readFile(path.join(evidence, 'bootstrap.json')));
     // Simulate checkout cleaning workspace files. The evidence is outside that workspace.

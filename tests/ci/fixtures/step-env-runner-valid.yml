@@ -1,0 +1,11 @@
+name: Accepted step context regression
+on: push
+jobs:
+  check:
+    runs-on: windows-latest
+    env:
+      RUN_ID: ${{ github.run_id }}
+    steps:
+      - env:
+          TILT_CI_EVIDENCE_ROOT: ${{ runner.temp }}/tilt-ci-${{ github.run_id }}
+        run: Write-Output $env:TILT_CI_EVIDENCE_ROOT

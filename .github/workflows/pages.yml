@@ -18,11 +18,12 @@ jobs:
       run:
         shell: pwsh
     env:
-      TILT_CI_EVIDENCE_ROOT: ${{ runner.temp }}/tilt-ci-${{ github.run_id }}-${{ github.run_attempt }}
       TILT_CI_EVIDENCE_SCOPE: github-actions
     steps:
       - name: Initialize evidence before checkout or installation
         id: evidence_start
+        env:
+          TILT_CI_EVIDENCE_ROOT: ${{ runner.temp }}/tilt-ci-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           # BEGIN_CI_EVIDENCE_BOOTSTRAP
           $ErrorActionPreference = 'Stop'
@@ -31,14 +32,21 @@ jobs:
           New-Item -ItemType Directory -Path $root | Out-Null
           $record = [ordered]@{ scope = $env:TILT_CI_EVIDENCE_SCOPE; commit = $env:GITHUB_SHA; runId = $env:GITHUB_RUN_ID; attempt = $env:GITHUB_RUN_ATTEMPT; startedUtc = [DateTime]::UtcNow.ToString('o'); state = 'initialized' }
           [IO.File]::WriteAllText((Join-Path $root 'bootstrap.json'), ($record | ConvertTo-Json), [Text.UTF8Encoding]::new($false))
+          [IO.File]::AppendAllText($env:GITHUB_ENV, "TILT_CI_EVIDENCE_ROOT=$root" + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
           # END_CI_EVIDENCE_BOOTSTRAP
       - uses: actions/checkout@v6
         id: checkout
+      - name: Install pinned workflow semantic validator with evidence
+        id: install_actionlint
+        run: ./tests/ci/run-command.ps1 -Name install_actionlint -Executable ./tests/ci/install-actionlint.ps1; exit $LASTEXITCODE
       - uses: actions/setup-node@v4
         id: node_setup
         with:
           node-version: '22'
           cache: npm
+      - name: Validate workflow semantics and rejection controls
+        id: workflow_semantics
+        run: ./tests/ci/run-command.ps1 -Name workflow_semantics -Executable npm.cmd -Arguments @('run', 'test:workflow'); exit $LASTEXITCODE
       - uses: actions/setup-python@v5
         id: python_setup
         with:
@@ -76,6 +84,7 @@ jobs:
         id: evidence_finish
         if: always()
         env:
+          TILT_CI_EVIDENCE_ROOT: ${{ runner.temp }}/tilt-ci-${{ github.run_id }}-${{ github.run_attempt }}
           TILT_CI_STEPS: ${{ toJSON(steps) }}
         run: |
           # BEGIN_CI_EVIDENCE_FINALIZE
@@ -91,6 +100,8 @@ jobs:
       - name: Preserve test evidence including failed attempts
         id: artifact_upload
         if: always()
+        env:
+          TILT_CI_EVIDENCE_ROOT: ${{ runner.temp }}/tilt-ci-${{ github.run_id }}-${{ github.run_attempt }}
         uses: actions/upload-artifact@v4
         with:
           name: tilt-tests-${{ github.run_id }}-${{ github.run_attempt }}

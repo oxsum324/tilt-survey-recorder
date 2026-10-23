@@ -1,0 +1,9 @@
+{
+  "version": "1.7.12",
+  "platform": "windows_amd64",
+  "url": "https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_windows_amd64.zip",
+  "archiveSha256": "6e7241b51e6817ea6a047693d8e6fed13b31819c9a0dd6c5a726e1592d22f6e9",
+  "executableSha256": "54ca21be3de4c7cfa26914aa8b61bd76bf573ef3caac5f80d110558cdf241718",
+  "upstreamRelease": "https://github.com/rhysd/actionlint/releases/tag/v1.7.12",
+  "contextReference": "https://docs.github.com/en/actions/reference/workflows-and-actions/contexts#context-availability"
+}
