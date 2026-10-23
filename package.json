@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node --test calc.test.js sketch.test.js store.test.js media.test.js sw.test.js language.test.js integrity.test.js migration.test.js",
-    "test:browser": "node tests/browser.mjs && node tests/media-browser.mjs && node tests/display-browser.mjs && node tests/upgrade-browser.mjs && node tests/network-browser.mjs && node tests/integrity-browser.mjs && node tests/mode-browser.mjs && node tests/mobile-layout-browser.mjs",
+    "test:browser": "node tests/browser.mjs && node tests/media-browser.mjs && node tests/display-browser.mjs && node tests/upgrade-browser.mjs && node tests/network-browser.mjs && node tests/integrity-browser.mjs && node tests/mode-browser.mjs && node tests/mobile-layout-browser.mjs && node tests/review-followups-browser.mjs",
     "start": "node serve.mjs"
   },
   "devDependencies": {

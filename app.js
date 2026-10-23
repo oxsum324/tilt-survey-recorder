@@ -58,9 +58,9 @@ function input(
   label,
   path,
   value,
-  { unit = "", signed = false, placeholder = "", type = "text", numeric = true } = {},
+  { unit = "", signed = false, placeholder = "", type = "text", numeric = true, ariaLabel = "" } = {},
 ) {
-  return `<label class="field"><span>${label}${unit ? ` <small>（${unit}）</small>` : ""}</span><div class="input-wrap"><input data-field="${path}" value="${esc(value)}" type="${type}" ${numeric ? 'inputmode="decimal" enterkeyhint="next"' : ""} ${placeholder ? `placeholder="${esc(placeholder)}"` : ""} autocomplete="off"${type === "text" ? ' maxlength="3000"' : ""}>${signed ? `<button class="sign-button" type="button" data-sign="${path}" aria-label="${label}切換正負號">±</button>` : ""}</div></label>`;
+  return `<label class="field"><span>${label}${unit ? ` <small>（${unit}）</small>` : ""}</span><div class="input-wrap"><input data-field="${path}" value="${esc(value)}" type="${type}" ${numeric ? 'inputmode="decimal" enterkeyhint="next"' : ""} ${placeholder ? `placeholder="${esc(placeholder)}"` : ""} autocomplete="off"${type === "text" ? ' maxlength="3000"' : ""}${ariaLabel ? ` aria-label="${esc(ariaLabel)}"` : ""}>${signed ? `<button class="sign-button" type="button" data-sign="${path}" aria-label="${label}切換正負號">±</button>` : ""}</div></label>`;
 }
 const select = (label, path, value, options) =>
   `<label class="field"><span>${label}</span><select data-field="${path}">${options.map(([v, t]) => option(v, t, value)).join("")}</select></label>`;
@@ -495,7 +495,7 @@ function pairSettingsView(pair, index, uses) {
     `pairs.${index}.facadeId`,
     pair.facadeId,
     project.facades.map((f) => [f.id, f.name]),
-  )}</div>${uses("A") ? `<div class="shared-height-row">${check("兩方向共用垂距 H", `pairs.${index}.sharedH`, pair.sharedH)}${pair.sharedH ? input("H", `pairs.${index}.inPlane.A.hCm`, pair.inPlane.A.hCm, { unit: "cm" }) : ""}</div>` : ""}${disclosure(`pair:${pair.id}:more`, "更多設定", moreSummary(pair), more, pair.corner !== "right" || !!pair.tbHeightCm || !!pair.note)}${uses("B") ? '<p class="hint">測站應位於待測分量的方向線上；視線斜交時，量得值為視線方向分量。</p>' : ""}${uses("C") ? '<p class="hint">N（北）、E（東）、Z（高程），請先在「立面參數」設定基準。</p>' : ""}</section>`;
+  )}</div>${uses("A") ? `<div class="shared-height-row">${check("兩方向共用垂距 H", `pairs.${index}.sharedH`, pair.sharedH)}${pair.sharedH ? input("H", `pairs.${index}.inPlane.A.hCm`, pair.inPlane.A.hCm, { unit: "cm", ariaLabel: "共用垂距 H（cm）" }) : ""}</div>` : ""}${disclosure(`pair:${pair.id}:more`, "更多設定", moreSummary(pair), more, pair.corner !== "right" || !!pair.tbHeightCm || !!pair.note)}${uses("B") ? '<p class="hint">測站應位於待測分量的方向線上；視線斜交時，量得值為視線方向分量。</p>' : ""}${uses("C") ? '<p class="hint">N（北）、E（東）、Z（高程），請先在「立面參數」設定基準。</p>' : ""}</section>`;
 }
 function readingCardsView(pair, index) {
   return `<div class="measurement-grid">${directionForm(pair, index, "inPlane")}${directionForm(pair, index, "outPlane")}</div><section class="card confirm-card"><div id="confirmState"></div><div class="button-row"><button class="primary" data-action="confirm">確認本組讀數</button><button data-action="preview">預覽成果表</button><button data-action="tab-photos">點位照片與標註</button><button data-action="tab-map">平面圖標示</button><button class="danger-text" data-action="delete-pair">刪除本組</button></div><p class="hint">草稿會自動保存；產出成果前須確認讀數。更正已確認的讀數時，會要求填原因。</p></section>`;
@@ -573,12 +573,13 @@ function reportView() {
   );
 }
 const resultsSizeObserver = new ResizeObserver((entries) => {
-  const element = entries[0]?.target;
-  if (element?.isConnected)
-    document.documentElement.style.setProperty(
-      "--live-results-height",
-      `${element.getBoundingClientRect().height}px`,
-    );
+  for (const { target: element } of entries) {
+    if (element?.isConnected && element.id === "liveResults")
+      document.documentElement.style.setProperty(
+        "--live-results-height",
+        `${element.getBoundingClientRect().height}px`,
+      );
+  }
 });
 function observeResultsSize() {
   resultsSizeObserver.disconnect();
@@ -621,6 +622,7 @@ function render() {
   mediaUI.dispose();
   reportGeneration++;
   document.body.classList.toggle("readings-active", tab === "readings");
+  document.documentElement.classList.toggle("readings-active", tab === "readings");
   document
     .querySelectorAll("[data-tab]")
     .forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));

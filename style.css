@@ -1375,7 +1375,7 @@ dialog p {
   }
 }
 @media screen and (min-width: 961px) {
-  html:has(body.readings-active) {
+  html.readings-active {
     scroll-padding-top: calc(
       var(--app-header-height, 110px) + var(--live-results-height, 0px) + 16px
     );
