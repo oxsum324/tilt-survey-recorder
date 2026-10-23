@@ -1,0 +1,6 @@
+[
+ {"label":"T1","dx":"2.3","height":"486.5","ratio":"1／212","direction":"向右傾","tp":"TP1","tb":"TB1","dxMm":23,"heightMm":4865},
+ {"label":"T1′","dx":"2.9","height":"486.5","ratio":"1／168","direction":"向後傾","tp":"TP1","tb":"TB1","dxMm":29,"heightMm":4865},
+ {"label":"T2","dx":"1.9","height":"357.9","ratio":"1／188","direction":"向右傾","tp":"TP2","tb":"TB2","dxMm":19,"heightMm":3579},
+ {"label":"T2′","dx":"2.0","height":"357.9","ratio":"1／179","direction":"向後傾","tp":"TP2","tb":"TB2","dxMm":20,"heightMm":3579}
+]
