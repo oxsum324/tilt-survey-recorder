@@ -1,7 +1,11 @@
 import {VERSION} from '../model.js';
 import {poll,reportReady} from './poll.mjs';
-import {chromium} from 'playwright';import assert from 'node:assert/strict';import http from 'node:http';import fs from 'node:fs/promises';import {execFileSync} from 'node:child_process';import {fileURLToPath} from 'node:url';
-const root=fileURLToPath(new URL('../',import.meta.url)),oldRef='b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc',oldNames=['index.html','app.js','model.js','calc.js','sketch.js','report.js','store.js','style.css','sw.js','manifest.webmanifest','icon.svg'],old=new Map(oldNames.map(name=>[name,execFileSync('git',['show',`${oldRef}:${name}`],{cwd:root})]));let current=false,revision=0;
+import {chromium} from 'playwright';import assert from 'node:assert/strict';import http from 'node:http';import fs from 'node:fs/promises';import {createHash} from 'node:crypto';import {fileURLToPath} from 'node:url';
+const root=fileURLToPath(new URL('../',import.meta.url)),fixtureRoot=new URL('../checks/fixtures/upgrade-v0.1.0/',import.meta.url);
+const fixture=JSON.parse(await fs.readFile(new URL('manifest.json',fixtureRoot),'utf8')),old=new Map();
+assert.equal(fixture.files.length,11);
+for(const file of fixture.files){const bytes=await fs.readFile(new URL(file.name,fixtureRoot));assert.equal(createHash('sha256').update(bytes).digest('hex'),file.sha256);assert.equal(bytes.length,file.bytes);old.set(file.name,bytes);}
+let current=false,revision=0;
 const types={html:'text/html',js:'text/javascript',css:'text/css',svg:'image/svg+xml',webmanifest:'application/manifest+json'};
 const server=http.createServer(async(req,res)=>{try{const name=new URL(req.url,'http://localhost').pathname.slice(1)||'index.html';if(name.includes('..'))throw Error();let data=current?await fs.readFile(new URL('../'+name,import.meta.url)):old.get(name);if(!data)throw Error();if(current&&name==='sw.js'&&revision)data=Buffer.concat([data,Buffer.from(`\n// test revision ${revision}`)]);res.setHeader('Content-Type',types[name.split('.').at(-1)]||'text/plain');res.setHeader('Cache-Control','no-store');res.end(data);}catch{res.writeHead(404);res.end();}});await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`,browser=await chromium.launch({channel:process.platform==='win32'?'chrome':undefined,headless:true}),context=await browser.newContext(),page=await context.newPage();
 try{

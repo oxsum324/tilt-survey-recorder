@@ -1,0 +1,366 @@
+{
+  "format": "tilt-survey-migration-fixtures.v1",
+  "synthetic": true,
+  "version": "0.2.0",
+  "source": {
+    "ref": "b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc",
+    "modelSha256": "804d42deb31d3095013234b0a58fba1936559be237ce2d73884810f0fcd59bf9",
+    "calcSha256": "1143e58171642a6eabf8710306b780d8fafb95cb0a4e9656474257a9e3d5b0ce",
+    "note": "Synthetic V0.2 structure based on V0.1 model; not a claimed historical V0.2 export"
+  },
+  "cases": [
+    {
+      "name": "legacy-structure",
+      "project": {
+        "schema": 1,
+        "id": "00000000-0000-4000-8000-000000000148",
+        "appVersion": "0.2.0",
+        "createdAt": "2000-01-01T00:00:00.000Z",
+        "updatedAt": "2000-01-01T00:00:00.000Z",
+        "lastExportedAt": null,
+        "header": {
+          "orgName": "○○市土木技師公會",
+          "caseNumber": "合成示例",
+          "householdNo": "01",
+          "address": "合成示例（非真實案件）",
+          "surveyDate": "2026-09-30",
+          "surveyor": "合成示例",
+          "instrument": "示例全站儀"
+        },
+        "settings": {
+          "defaultMode": "A",
+          "toleranceMm": "3",
+          "minOffsetMm": "3",
+          "minHeightCm": "200",
+          "labelStyle": "prime",
+          "showCompass": false
+        },
+        "facades": [
+          {
+            "id": "00000000-0000-4000-8000-000000000147",
+            "name": "前側立面（示例）",
+            "facingDeg": "",
+            "baseline": {
+              "method": "none",
+              "A": {
+                "N": "",
+                "E": ""
+              },
+              "B": {
+                "N": "",
+                "E": ""
+              },
+              "azimuthDeg": ""
+            },
+            "building": {
+              "floorHeightsCm": [
+                "360",
+                "320",
+                "320",
+                "320"
+              ],
+              "parapetCm": "110",
+              "widthCm": "450",
+              "sideShownCm": "500",
+              "groundFloorType": "shop",
+              "showOpenings": true
+            }
+          }
+        ],
+        "pairs": [
+          {
+            "id": "00000000-0000-4000-8000-000000000149",
+            "index": 1,
+            "facadeId": "00000000-0000-4000-8000-000000000147",
+            "mode": "A",
+            "corner": "right",
+            "cornerOffsetCm": "",
+            "tbHeightCm": "395",
+            "note": "",
+            "sharedH": true,
+            "inPlane": {
+              "status": "measured",
+              "skipReason": "",
+              "A": {
+                "rounds": [
+                  {
+                    "source": "offset",
+                    "dxCm": "2.3",
+                    "upperCm": "",
+                    "lowerCm": "",
+                    "dir": "right"
+                  }
+                ],
+                "hCm": "486.5"
+              },
+              "B": {
+                "station": "rightSide",
+                "rounds": [
+                  {
+                    "tp": {
+                      "HD": "",
+                      "VD": ""
+                    },
+                    "tb": {
+                      "HD": "",
+                      "VD": ""
+                    }
+                  }
+                ]
+              },
+              "firstEnteredAt": "2000-01-01T00:00:00.000Z"
+            },
+            "outPlane": {
+              "status": "measured",
+              "skipReason": "",
+              "A": {
+                "rounds": [
+                  {
+                    "source": "offset",
+                    "dxCm": "2.9",
+                    "upperCm": "",
+                    "lowerCm": "",
+                    "dir": "back"
+                  }
+                ],
+                "hCm": "486.5"
+              },
+              "B": {
+                "station": "front",
+                "rounds": [
+                  {
+                    "tp": {
+                      "HD": "",
+                      "VD": ""
+                    },
+                    "tb": {
+                      "HD": "",
+                      "VD": ""
+                    }
+                  }
+                ]
+              },
+              "firstEnteredAt": "2000-01-01T00:00:00.000Z"
+            },
+            "C": {
+              "rounds": [
+                {
+                  "tp": {
+                    "N": "",
+                    "E": "",
+                    "Z": ""
+                  },
+                  "tb": {
+                    "N": "",
+                    "E": "",
+                    "Z": ""
+                  }
+                }
+              ]
+            },
+            "photos": [],
+            "mapMarker": null,
+            "confirmed": {
+              "snapshot": "{\"inPlane\":{\"data\":{\"hCm\":\"486.5\",\"rounds\":[{\"dir\":\"right\",\"dxCm\":\"2.3\",\"lowerCm\":\"\",\"source\":\"offset\",\"upperCm\":\"\"}]},\"status\":\"measured\"},\"mode\":\"A\",\"outPlane\":{\"data\":{\"hCm\":\"486.5\",\"rounds\":[{\"dir\":\"back\",\"dxCm\":\"2.9\",\"lowerCm\":\"\",\"source\":\"offset\",\"upperCm\":\"\"}]},\"status\":\"measured\"},\"sharedH\":true,\"sharedHeight\":\"486.5\"}",
+              "at": "2000-01-01T00:00:00.000Z"
+            }
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000150",
+            "index": 2,
+            "facadeId": "00000000-0000-4000-8000-000000000147",
+            "mode": "A",
+            "corner": "right",
+            "cornerOffsetCm": "",
+            "tbHeightCm": "395",
+            "note": "",
+            "sharedH": true,
+            "inPlane": {
+              "status": "measured",
+              "skipReason": "",
+              "A": {
+                "rounds": [
+                  {
+                    "source": "offset",
+                    "dxCm": "1.9",
+                    "upperCm": "",
+                    "lowerCm": "",
+                    "dir": "right"
+                  }
+                ],
+                "hCm": "357.9"
+              },
+              "B": {
+                "station": "rightSide",
+                "rounds": [
+                  {
+                    "tp": {
+                      "HD": "",
+                      "VD": ""
+                    },
+                    "tb": {
+                      "HD": "",
+                      "VD": ""
+                    }
+                  }
+                ]
+              },
+              "firstEnteredAt": "2000-01-01T00:00:00.000Z"
+            },
+            "outPlane": {
+              "status": "measured",
+              "skipReason": "",
+              "A": {
+                "rounds": [
+                  {
+                    "source": "offset",
+                    "dxCm": "2.0",
+                    "upperCm": "",
+                    "lowerCm": "",
+                    "dir": "back"
+                  }
+                ],
+                "hCm": "357.9"
+              },
+              "B": {
+                "station": "front",
+                "rounds": [
+                  {
+                    "tp": {
+                      "HD": "",
+                      "VD": ""
+                    },
+                    "tb": {
+                      "HD": "",
+                      "VD": ""
+                    }
+                  }
+                ]
+              },
+              "firstEnteredAt": "2000-01-01T00:00:00.000Z"
+            },
+            "C": {
+              "rounds": [
+                {
+                  "tp": {
+                    "N": "",
+                    "E": "",
+                    "Z": ""
+                  },
+                  "tb": {
+                    "N": "",
+                    "E": "",
+                    "Z": ""
+                  }
+                }
+              ]
+            },
+            "photos": [],
+            "mapMarker": null,
+            "confirmed": {
+              "snapshot": "{\"inPlane\":{\"data\":{\"hCm\":\"357.9\",\"rounds\":[{\"dir\":\"right\",\"dxCm\":\"1.9\",\"lowerCm\":\"\",\"source\":\"offset\",\"upperCm\":\"\"}]},\"status\":\"measured\"},\"mode\":\"A\",\"outPlane\":{\"data\":{\"hCm\":\"357.9\",\"rounds\":[{\"dir\":\"back\",\"dxCm\":\"2.0\",\"lowerCm\":\"\",\"source\":\"offset\",\"upperCm\":\"\"}]},\"status\":\"measured\"},\"sharedH\":true,\"sharedHeight\":\"357.9\"}",
+              "at": "2000-01-01T00:00:00.000Z"
+            }
+          }
+        ],
+        "map": null,
+        "auditLog": [],
+        "compareTo": null
+      },
+      "expectedResults": [
+        {
+          "inPlane": {
+            "status": "ok",
+            "dxMm": 23,
+            "hMm": 4865,
+            "signedMm": 23,
+            "dxCm": "2.3",
+            "hCm": "486.5",
+            "denominator": 212,
+            "direction": "right",
+            "directionText": "向右傾",
+            "ratioText": "1／212",
+            "differenceMm": null,
+            "warnings": [],
+            "rounds": [
+              {
+                "signedMm": 23,
+                "hMm": 4865
+              }
+            ],
+            "mode": "A",
+            "composite": null
+          },
+          "outPlane": {
+            "status": "ok",
+            "dxMm": 29,
+            "hMm": 4865,
+            "signedMm": 29,
+            "dxCm": "2.9",
+            "hCm": "486.5",
+            "denominator": 168,
+            "direction": "back",
+            "directionText": "向後傾",
+            "ratioText": "1／168",
+            "differenceMm": null,
+            "warnings": [],
+            "rounds": [
+              {
+                "signedMm": 29,
+                "hMm": 4865
+              }
+            ],
+            "mode": "A",
+            "composite": null
+          }
+        },
+        {
+          "inPlane": {
+            "status": "ok",
+            "dxMm": 19,
+            "hMm": 3579,
+            "signedMm": 19,
+            "dxCm": "1.9",
+            "hCm": "357.9",
+            "denominator": 188,
+            "direction": "right",
+            "directionText": "向右傾",
+            "ratioText": "1／188",
+            "differenceMm": null,
+            "warnings": [],
+            "rounds": [
+              {
+                "signedMm": 19,
+                "hMm": 3579
+              }
+            ],
+            "mode": "A",
+            "composite": null
+          },
+          "outPlane": {
+            "status": "ok",
+            "dxMm": 20,
+            "hMm": 3579,
+            "signedMm": 20,
+            "dxCm": "2.0",
+            "hCm": "357.9",
+            "denominator": 179,
+            "direction": "back",
+            "directionText": "向後傾",
+            "ratioText": "1／179",
+            "differenceMm": null,
+            "warnings": [],
+            "rounds": [
+              {
+                "signedMm": 20,
+                "hMm": 3579
+              }
+            ],
+            "mode": "A",
+            "composite": null
+          }
+        }
+      ]
+    }
+  ]
+}

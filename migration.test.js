@@ -1,16 +1,29 @@
-import test from 'node:test';import assert from 'node:assert/strict';import {execFileSync} from 'node:child_process';import fs from 'node:fs/promises';import {calculatePair} from './calc.js';import {normalizeProject,parseBackup,makeBackup} from './store.js';import {createPair,sampleProject,confirmObservation,isConfirmed,observationSnapshot} from './model.js';import {rawReport} from './report.js';
-const load=async(ref,file)=>import('data:text/javascript;base64,'+execFileSync('git',['show',`${ref}:${file}`]).toString('base64'));
-for(const [version,ref]of [['0.1.0','b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc'],['0.3.0','3f83c6deba226c7473974055ebcf6f7de0363b76']])test(`V${version} 案件讀取遷移逐點完全保留成果、原始字串與確認快照`,async()=>{
- const old=await load(ref,'model.js'),calc=await load(ref,'calc.js'),p=old.sampleProject(),f=p.facades[0];f.baseline={...f.baseline,method:'azimuth',azimuthDeg:'90'};
- const b=old.createPair(3,f.id,'B');b.inPlane.B.rounds=[{tp:{HD:'8.100',VD:'6.215'},tb:{HD:'8.123',VD:'1.350'}}];b.outPlane.B.rounds=[{tp:{HD:'12.374',VD:'6.215'},tb:{HD:'12.345',VD:'1.350'}}];p.pairs.push(b);
- const c=old.createPair(4,f.id,'C');c.C.rounds=[{tp:{N:'100.029',E:'200.023',Z:'14.865'},tb:{N:'100.000',E:'200.000',Z:'10.000'}}];p.pairs.push(c);
- const averaged=structuredClone(p.pairs[0]);averaged.id=crypto.randomUUID();averaged.index=5;averaged.inPlane.A.rounds=[{...averaged.inPlane.A.rounds[0],dxCm:'02.2000',dir:'right'},{...averaged.inPlane.A.rounds[0],dxCm:'2.5',dir:'right'}];averaged.outPlane.A.rounds=[{...averaged.outPlane.A.rounds[0],dxCm:'2.2',dir:'front'},{...averaged.outPlane.A.rounds[0],dxCm:'2.5',dir:'front'}];p.pairs.push(averaged);
- const individual=structuredClone(p.pairs[1]);individual.id=crypto.randomUUID();individual.index=6;individual.sharedH=false;individual.outPlane.A.hCm='441.0';individual.inPlane.A.rounds[0].dxCm='0.0';p.pairs.push(individual);
- for(const pair of p.pairs){pair.confirmed=null;old.confirmObservation(p,pair,f);}
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import fs from 'node:fs/promises';
+import {calculatePair} from './calc.js';
+import {normalizeProject,parseBackup,makeBackup} from './store.js';
+import {createPair,sampleProject,confirmObservation,isConfirmed,observationSnapshot} from './model.js';
+import {rawReport} from './report.js';
+const fixtureRoot=new URL('./checks/fixtures/migration/',import.meta.url);
+const readFixture=async(version,name)=>{
+ const fixture=JSON.parse(await fs.readFile(new URL(`v${version}.json`,fixtureRoot),'utf8'));
+ const value=fixture.cases.find(c=>c.name===name);assert.ok(value,`Missing frozen fixture ${version}/${name}`);
+ return {...value,ref:fixture.source.ref};
+};
+test('固定歷史 fixture 五版本、35 案件與 96 方向均有來源與完整雜湊',async()=>{
+ const manifest=JSON.parse(await fs.readFile(new URL('manifest.json',fixtureRoot),'utf8'));
+ assert.deepEqual(manifest.fixtures.map(f=>f.version).sort(),['0.1.0','0.2.0','0.3.0','0.4.0','0.4.1']);
+ assert.equal(manifest.fixtures.reduce((n,f)=>n+f.cases,0),35);assert.equal(manifest.fixtures.reduce((n,f)=>n+f.pairs*2,0),96);
+ for(const record of manifest.fixtures){const bytes=await fs.readFile(new URL(record.file,fixtureRoot));assert.equal(createHash('sha256').update(bytes).digest('hex'),record.sha256);const fixture=JSON.parse(bytes);assert.equal(fixture.synthetic,true);assert.deepEqual(fixture.source,record.source);assert.match(record.source.modelSha256,/^[a-f0-9]{64}$/);assert.match(record.source.calcSha256,/^[a-f0-9]{64}$/);assert.equal(fixture.cases.length,record.cases);}
+});
+for(const version of ['0.1.0','0.3.0'])test(`V${version} 案件讀取遷移逐點完全保留成果、原始字串與確認快照`,async()=>{
+ const {project:p,expectedResults,ref}=await readFixture(version,'base');
  const contents=JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]}),q=parseBackup(contents).project,receipt=[];
- assert.equal(q.schema,1);
+ assert.equal(q.schema,1);assert.equal(p.pairs.length,6);
  for(let i=0;i<p.pairs.length;i++){
-  const before=calc.calculatePair(p.pairs[i],f,p.settings),after=calculatePair(q.pairs[i],q.facades[0],q.settings);
+  const before=expectedResults[i],after=calculatePair(q.pairs[i],q.facades[0],q.settings);
   assert.deepEqual(after,before,`STOP P8: V${version} point ${i+1}`);
   assert.equal(q.pairs[i].confirmed.snapshot,p.pairs[i].confirmed.snapshot);assert.equal(isConfirmed(q.pairs[i],q.facades[0]),true);
   for(const axis of ['inPlane','outPlane']){assert.equal(q.pairs[i][axis].mode,p.pairs[i].mode);assert.deepEqual(q.pairs[i][axis].A,p.pairs[i][axis].A);assert.deepEqual(q.pairs[i][axis].B,p.pairs[i][axis].B);receipt.push({point:i+1,axis,before,after,equal:true});}
@@ -28,18 +41,17 @@ test('單向 C 共用座標，另一向保留 A，預設沿用測點組',()=>{
 });
 test('無效方向方式拒絕，改預設但實際方向不變不影響讀數確認',()=>{const p=sampleProject(),pair=p.pairs[0];pair.inPlane.mode='A';pair.outPlane.mode='A';const before=observationSnapshot(pair,p.facades[0]);pair.mode='C';assert.equal(observationSnapshot(pair,p.facades[0]),before);pair.outPlane.mode='invalid';assert.throws(()=>normalizeProject(p),/方向作業方式/);});
 
-for(const [version,ref]of [['0.1.0','b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc'],['0.3.0','3f83c6deba226c7473974055ebcf6f7de0363b76']])test(`V${version} 殘留方向方式不取代組設定，所有成果與確認沿用舊引擎`,async()=>{
- const old=await load(ref,'model.js'),calc=await load(ref,'calc.js'),receipt=[];
+for(const version of ['0.1.0','0.3.0'])test(`V${version} 殘留方向方式不取代組設定，所有成果與確認沿用舊引擎`,async()=>{
+ const receipt=[];let ref;
  for(const group of ['A','B','C'])for(const stale of ['','A','B','C','invalid']){
-  const p=old.sampleProject(),pair=p.pairs[0],f=p.facades[0];p.pairs=[pair];pair.mode=group;f.baseline.method='azimuth';f.baseline.azimuthDeg='90';
-  pair.inPlane.mode=stale;pair.outPlane.mode=stale;
-  pair.inPlane.B.rounds=[{tp:{HD:'8.100',VD:'6.215'},tb:{HD:'8.146',VD:'1.350'}}];pair.outPlane.B.rounds=[{tp:{HD:'12.374',VD:'6.215'},tb:{HD:'12.345',VD:'1.350'}}];
-  pair.C.rounds=[{tp:{N:'100.029',E:'200.023',Z:'14.865'},tb:{N:'100.000',E:'200.000',Z:'10.000'}}];pair.confirmed=null;old.confirmObservation(p,pair,f);
-  const before=calc.calculatePair(pair,f,p.settings),q=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]})).project,after=calculatePair(q.pairs[0],q.facades[0],q.settings);
+  const fixture=await readFixture(version,`stale-${group}-${stale||'empty'}`),p=fixture.project,pair=p.pairs[0];ref=fixture.ref;
+  assert.equal(pair.mode,group);assert.equal(pair.inPlane.mode,stale);assert.equal(pair.outPlane.mode,stale);
+  const before=fixture.expectedResults[0],q=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]})).project,after=calculatePair(q.pairs[0],q.facades[0],q.settings);
   assert.deepEqual(after,before);assert.equal(isConfirmed(q.pairs[0],q.facades[0]),true);assert.deepEqual(q.pairs[0].confirmed,pair.confirmed);
   for(const axis of ['inPlane','outPlane']){assert.equal(q.pairs[0][axis].mode,stale===''?'':group);assert.equal(q.pairs[0][axis].mode||q.pairs[0].mode,group);assert.deepEqual(q.pairs[0][axis].A,pair[axis].A);assert.deepEqual(q.pairs[0][axis].B,pair[axis].B);}
   assert.deepEqual(parseBackup(JSON.stringify(await makeBackup(q))).project,q);receipt.push({group,stale,before,after,confirmed:true});
  }
+ assert.equal(receipt.length,15);
  await fs.mkdir('output/migration',{recursive:true});await fs.writeFile(`output/migration/v${version}-stale-modes.json`,JSON.stringify({version,ref,cases:receipt.length,directions:receipt.length*2,receipt},null,2));
 });
 test('無版本舊檔沿用組設定，當版混合與沿用設定往返不變',async()=>{
@@ -47,16 +59,17 @@ test('無版本舊檔沿用組設定，當版混合與沿用設定往返不變',
  for(const mode of ['','A','B','C']){const p=sampleProject();p.pairs[0].inPlane.mode=mode;p.pairs[0].outPlane.mode='B';const q=parseBackup(JSON.stringify(await makeBackup(p))).project;assert.equal(q.pairs[0].inPlane.mode,mode);assert.equal(q.pairs[0].outPlane.mode,'B');}
 });
 test('實際 V0.4.0 分向案件與 V0.2 結構相容檔可讀取，成果與確認不變',async()=>{
- const ref='b36e2b4405af2aa3db9ebdb030ac98468f467cc4',old=await load(ref,'model.js'),calc=await load(ref,'calc.js'),p=old.sampleProject(),pair=p.pairs[0],f=p.facades[0];pair.outPlane.mode='B';pair.outPlane.B.rounds=[{tp:{HD:'12.374',VD:'6.215'},tb:{HD:'12.345',VD:'1.350'}}];old.confirmObservation(p,pair,f,'混合方式合成案例');
- const q=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]})).project;for(let i=0;i<p.pairs.length;i++){assert.deepEqual(calculatePair(q.pairs[i],q.facades[0],q.settings),calc.calculatePair(p.pairs[i],f,p.settings));assert.deepEqual(q.pairs[i].confirmed,p.pairs[i].confirmed);assert.equal(isConfirmed(q.pairs[i],q.facades[0]),true);}assert.equal(q.pairs[0].outPlane.mode,'B');
- const legacy=await load('b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc','model.js'),v2=legacy.sampleProject();v2.appVersion='0.2.0';const restored=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:v2,media:[]})).project;assert.equal(isConfirmed(restored.pairs[0],restored.facades[0]),true);assert.equal(calculatePair(restored.pairs[0],restored.facades[0]).inPlane.denominator,212);
+ const {project:p,expectedResults}=await readFixture('0.4.0','mixed');
+ const q=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]})).project;for(let i=0;i<p.pairs.length;i++){assert.deepEqual(calculatePair(q.pairs[i],q.facades[0],q.settings),expectedResults[i]);assert.deepEqual(q.pairs[i].confirmed,p.pairs[i].confirmed);assert.equal(isConfirmed(q.pairs[i],q.facades[0]),true);}assert.equal(q.pairs[0].outPlane.mode,'B');
+ const v2=await readFixture('0.2.0','legacy-structure'),restored=parseBackup(JSON.stringify({format:'tilt-survey-case.v1',project:v2.project,media:[]})).project;
+ assert.equal(isConfirmed(restored.pairs[0],restored.facades[0]),true);assert.equal(calculatePair(restored.pairs[0],restored.facades[0]).inPlane.denominator,212);
+ for(let i=0;i<restored.pairs.length;i++)assert.deepEqual(calculatePair(restored.pairs[i],restored.facades[0],restored.settings),v2.expectedResults[i]);
 });
-
 test('實際 V0.4.1 案件保留混合方式、原始字串、成果與確認並可往返',async()=>{
- const ref='bc271925c74944d00fa97cfd38922312403b408b',old=await load(ref,'model.js'),calc=await load(ref,'calc.js'),p=old.sampleProject(),pair=p.pairs[0],f=p.facades[0];pair.outPlane.mode='B';pair.outPlane.B.rounds=[{tp:{HD:'12.374',VD:'6.215'},tb:{HD:'12.345',VD:'1.350'}}];old.confirmObservation(p,pair,f,'V0.4.1 混合方式合成案例');
+ const {project:p,expectedResults,ref}=await readFixture('0.4.1','mixed');
  const contents=JSON.stringify({format:'tilt-survey-case.v1',project:p,media:[]}),q=parseBackup(contents).project;
  assert.equal(q.schema,1);assert.deepEqual(q.pairs,p.pairs);assert.deepEqual(q.facades,p.facades);assert.deepEqual(q.header,p.header);
- for(let i=0;i<p.pairs.length;i++){assert.deepEqual(calculatePair(q.pairs[i],q.facades[0],q.settings),calc.calculatePair(p.pairs[i],f,p.settings));assert.equal(isConfirmed(q.pairs[i],q.facades[0]),true);}
+ for(let i=0;i<p.pairs.length;i++){assert.deepEqual(calculatePair(q.pairs[i],q.facades[0],q.settings),expectedResults[i]);assert.equal(isConfirmed(q.pairs[i],q.facades[0]),true);}
  assert.deepEqual(parseBackup(JSON.stringify(await makeBackup(q))).project,q);
  await fs.mkdir('output/migration',{recursive:true});await fs.writeFile('output/migration/v0.4.1.tiltsurvey',contents);await fs.writeFile('output/migration/v0.4.1-results.json',JSON.stringify({version:'0.4.1',ref,pairs:q.pairs.length,equal:true,confirmed:true,roundtrip:true},null,2));
 });
