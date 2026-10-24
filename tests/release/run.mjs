@@ -5,6 +5,7 @@ import {execFileSync} from 'node:child_process';
 import {createHash,randomUUID} from 'node:crypto';
 import {runCaptured} from './command.mjs';
 import {loadSites,assertRevisionChanged} from './site.mjs';
+import {runMapNegative} from './map-negative.mjs';
 const root=path.resolve(process.env.TILT_RELEASE_OUTPUT_ROOT||'output/playwright/release-regressions',`release-${randomUUID()}`);
 await fs.mkdir(root,{recursive:true});await fs.mkdir(path.join(root,'commands'));
 const head=execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),cases=[];
@@ -44,9 +45,17 @@ try{
   await pass(name,{rawExitCode:execution.rawExitCode,exitCode:execution.exitCode,expectedFailure:negative,checks:result.checks.length});
  }
  assert.equal(cases.length,9);
+ for(const channel of ['chrome','msedge'])for(const mode of ['map-missing','map-corrupt']){
+  const proof=await runMapNegative({root,channel,mode});await pass(proof.name,proof.data);
+ }
+ assert.equal(cases.length,13);
+ for(const channel of ['chrome','msedge']){
+  const proof=await runMapNegative({root,channel,mode:'map-occluded'});await pass(proof.name,proof.data);
+ }
+ assert.equal(cases.length,15);
 }catch(error){cases.push({name:'suite-failure',status:'fail',error:{name:error.name,message:error.message,stack:error.stack}});await save();throw error;}
 finally{
  const files=[];const walk=async dir=>{for(const e of await fs.readdir(dir,{withFileTypes:true})){const p=path.join(dir,e.name);if(e.isDirectory())await walk(p);else{const b=await fs.readFile(p);files.push({file:path.relative(root,p).replaceAll('\\','/'),bytes:b.length,sha256:createHash('sha256').update(b).digest('hex')});}}};
  await walk(root);await fs.writeFile(path.join(root,'sha256.json'),JSON.stringify(files,null,2));
 }
-console.log(JSON.stringify({head,releaseCases:9,freshBasicChecks:32,expectedFailingBrowserChildren:4,evidence:root}));
+console.log(JSON.stringify({head,releaseCases:15,originalReleaseCases:9,preexistingSvgCases:4,addedOcclusionCases:2,freshBasicChecks:32,expectedFailingBrowserChildren:10,evidence:root}));

@@ -5,6 +5,7 @@ import {spawn, execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
+import {executionOrigin} from '../execution-origin.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(root, '../..');
@@ -64,7 +65,7 @@ const commands = [
     path.join(out, 'chrome-1280-normal/print-preview.pdf')]],
 ];
 const receipt = {head, branch: git('branch', '--show-current'), url,
-  scope: 'Local staged branch only; not a live-site deployment verification',
+  ...executionOrigin(), targetScope: 'staged branch only; not a live-site deployment verification',
   startedUtc: new Date().toISOString(), node: process.version, python,
   sourceBefore, executions: []};
 const save = () => fs.writeFile(path.join(runDir, 'execution.json'), JSON.stringify(receipt, null, 2));
