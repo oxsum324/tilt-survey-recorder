@@ -131,14 +131,16 @@ reload 前後 checkpoint。跨導覽 journal 留在隔離 context 的 sessionSto
 已觀測的 console 事件；失敗時 page-state.json 保存目前 details、原始偏好與 journal。
 原 HTML／PNG／trace、逐檔 SHA、取證期限、寫入隔離及原錯誤身分保留政策不變。
 
-既有 `test:browser-evidence` 在原十類之後執行 `disclosure-regressions.mjs`，新增三類另計：
+既有 `test:browser-evidence` 在原十類之後執行 `disclosure-regressions.mjs`，新增四類另計：
 
 - 真實瀏覽器將保存刻意扣住數個繪製影格，確認等待不能提早完成，釋放後才能重開且仍收合。
 - 永不完成的保存必須拒絕，即使 DOM 已收合也不能算成功。
 - 真實應用合成案件注入一次保存遺失，確認原 AssertionError／exit 1 不變，關閉前仍取得
   DOM、偏好、事件順序、HTML、PNG、trace 與 SHA；子程序不能靠 watchdog 強殺通過。
+- 舊案件有未保存編輯時，用應用既有案件採用流程載入記憶體合成備份，再立即重開；仍須為
+  新案件、三測點組、原讀數 2.3 與分母 212，避免直接寫 IndexedDB 後被舊頁 pagehide 保存覆蓋。
 
-三類各跑 Chrome／Edge，共六組；結果在 `output/playwright/disclosure-regressions/<run>/`
+四類各跑 Chrome／Edge，共八組；結果在 `output/playwright/disclosure-regressions/<run>/`
 （或 `TILT_DISCLOSURE_REGRESSION_ROOT` 指定的新目錄），不併入原十類、101 或八情境 80。
 250 ms 短期限僅屬合成反例；正式 mobile-layout 的等待期限不變。原七個 npm 命令及 workflow
 字串不變，CI 既有命令與附件路徑直接涵蓋新增回歸。成功的 probe／guard 收據仍不是手機實機驗收。

@@ -53,3 +53,14 @@ export async function waitForDisclosureSaved(page, locator, expected, timeout = 
     assert.equal(state.saved, expected, 'Disclosure preference must be saved before reload');
   }, timeout);
 }
+
+// Use the application's existing adoption path: it drains old saves and replaces
+// both the stored project and live model before pagehide can save the old model.
+// This is an in-memory synthetic backup, not a user case file.
+export async function adoptSyntheticProject(page, project) {
+  await page.locator('#importFile').setInputFiles({name:'disclosure-fixture.tiltsurvey',mimeType:'application/json',
+    buffer:Buffer.from(JSON.stringify({format:'tilt-survey-case.v1',project,media:[]}))});
+  await page.locator('#actionDialog').getByRole('button',{name:'直接取代',exact:true}).click();
+  await poll(page,async()=>assert.equal(await page.evaluate(async()=>{const {loadProject}=await import('./store.js');return(await loadProject()).id;}),project.id));
+  await page.waitForFunction(()=>document.documentElement.dataset.saveState==='saved');
+}

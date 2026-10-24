@@ -3,7 +3,7 @@ import path from 'node:path';
 import {chromium} from 'playwright';
 import {startServer} from '../../serve.mjs';
 import {withFailureEvidence,closeAfterEvidence} from '../browser-failure-evidence.mjs';
-import {installDisclosureProbe,disclosureCheckpoint,waitForDisclosureSaved} from '../disclosure-state.mjs';
+import {installDisclosureProbe,disclosureCheckpoint,waitForDisclosureSaved,adoptSyntheticProject} from '../disclosure-state.mjs';
 
 const [root,channel] = process.argv.slice(2),name='disclosure-save-failure';
 const server=await startServer(),browser=await chromium.launch({channel:channel==='chromium'?undefined:channel,headless:true});
@@ -25,7 +25,8 @@ try {
     });
     await page.goto(`http://127.0.0.1:${server.address().port}`);
     await page.locator('[data-field="header.caseNumber"]').waitFor();
-    await page.evaluate(async()=>{const {sampleProject}=await import('./model.js'),{replaceProject}=await import('./store.js');await replaceProject(sampleProject());});
+    const project=await page.evaluate(async()=>{const {sampleProject}=await import('./model.js');return sampleProject();});
+    await adoptSyntheticProject(page,project);
     await page.reload();await page.locator('[data-tab="readings"]').click();
     const direction=page.locator('[data-reading-axis="inPlane"] .form-disclosure');
     await direction.locator('summary').click();await waitForDisclosureSaved(page,direction,true);

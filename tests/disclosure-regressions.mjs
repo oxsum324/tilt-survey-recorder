@@ -6,7 +6,8 @@ import http from 'node:http';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {chromium} from 'playwright';
-import {installDisclosureProbe,disclosureCheckpoint,waitForDisclosureSaved} from './disclosure-state.mjs';
+import {startServer} from '../serve.mjs';
+import {installDisclosureProbe,disclosureCheckpoint,waitForDisclosureSaved,adoptSyntheticProject} from './disclosure-state.mjs';
 
 const root=path.resolve(process.env.TILT_DISCLOSURE_REGRESSION_ROOT||path.join('output/playwright/disclosure-regressions',new Date().toISOString().replace(/[:.]/g,'-')));
 await fs.mkdir(path.dirname(root),{recursive:true});await fs.mkdir(root);
@@ -99,4 +100,25 @@ test('real application assertion failure saves disclosure state, event order and
     observations.push({channel,...completion,sameOriginalError:true,key:target.key,domOpen:target.open,saved:true,journalEvents:journal.length});
   }
   await passed('real-app-failure-captured',observations);
+});
+
+test('synthetic fixture adoption replaces the live model before the old page can save on reload',async()=>{
+  const observations=[];
+  for(const channel of channels){
+    const server=await startServer(),browser=await chromium.launch({channel:channel==='chromium'?undefined:channel,headless:true});
+    const context=await browser.newContext(),page=await context.newPage();
+    try {
+      await page.goto(`http://127.0.0.1:${server.address().port}`);await page.locator('[data-field="header.caseNumber"]').waitFor();
+      const initial=await page.evaluate(async()=>{const {sampleProject}=await import('./model.js');return sampleProject();});
+      await adoptSyntheticProject(page,initial);await page.locator('[data-tab="readings"]').click();
+      const edited=await page.evaluate(()=>{const input=document.querySelector('[data-field="pairs.0.inPlane.A.rounds.0.dxCm"]');input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));return{value:input.value,state:document.documentElement.dataset.saveState};});
+      assert.deepEqual(edited,{value:'',state:'pending'});
+      const next=await page.evaluate(async()=>{const {sampleProject,createPair,confirmObservation}=await import('./model.js');const p=sampleProject(),q=createPair(3,p.facades[0].id);q.inPlane.A.hCm=q.outPlane.A.hCm='441.0';q.inPlane.A.rounds[0].dxCm=q.outPlane.A.rounds[0].dxCm='2.0';p.pairs.push(q);confirmObservation(p,q,p.facades[0]);return p;});
+      await adoptSyntheticProject(page,next);await page.reload();await page.locator('[data-field="header.caseNumber"]').waitFor();
+      const state=await page.evaluate(async()=>{const {loadProject}=await import('./store.js'),{calculatePair}=await import('./calc.js');const p=await loadProject();return{id:p.id,count:p.pairs.length,dx:p.pairs[0].inPlane.A.rounds[0].dxCm,denominator:calculatePair(p.pairs[0],p.facades[0],p.settings).inPlane.denominator};});
+      assert.deepEqual(state,{id:next.id,count:3,dx:'2.3',denominator:212});
+      observations.push({channel,oldId:initial.id,edited,...state});
+    } finally {await context.close();await browser.close();server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+  }
+  await passed('fixture-adoption-survives-old-save',observations);
 });
