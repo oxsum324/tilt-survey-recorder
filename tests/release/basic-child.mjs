@@ -3,9 +3,10 @@ import path from 'node:path';
 import {chromium} from 'playwright';
 import {loadSites,siteServer,sha} from './site.mjs';
 import {basicChecks} from './basic-checks.mjs';
+import {loadLiveSites} from './live-site.mjs';
 import {withFailureEvidence,closeAfterEvidence} from '../browser-failure-evidence.mjs';
-const [out,channel,fault]=process.argv.slice(2);await fs.mkdir(out,{recursive:true});
-const sites=await loadSites(),server=await siteServer(sites),browser=await chromium.launch({channel,headless:true});
+const [out,channel,fault,liveHead]=process.argv.slice(2);await fs.mkdir(out,{recursive:true});
+const sites=liveHead?await loadLiveSites(liveHead):await loadSites(),server=liveHead?{url:sites.url,close:async()=>{}}:await siteServer(sites),browser=await chromium.launch({channel,headless:true});
 const context=await browser.newContext({acceptDownloads:true}),page=await context.newPage();
 if(fault==='initial-console')await context.addInitScript(()=>console.error('injected-first-navigation-console-error'));
 try {

@@ -56,6 +56,10 @@ assert.match(step('release_regressions'), /run-command\.ps1 -Name release_regres
 assert.match(step('release_regressions'), /test:release/);
 assert.ok(ids.indexOf('release_regressions') > ids.indexOf('site_build'));
 assert.ok(ids.indexOf('release_regressions') < ids.indexOf('desktop'));
+assert.match(step('live_release'), /run-command\.ps1 -Name live_release/);
+assert.match(step('live_release'), /test:live/);
+assert.match(step('live_release'), /if: github\.ref != 'refs\/heads\/main'/);
+assert.ok(ids.indexOf('live_release') < ids.indexOf('evidence_finish'));
 assert.match(workflow, /needs: checks/);
 assert.equal((workflow.match(/if: github\.ref == 'refs\/heads\/main' && github\.event_name != 'pull_request'/g) || []).length, 2);
 

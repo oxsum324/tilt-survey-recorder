@@ -84,8 +84,14 @@ jobs:
         id: release_regressions
         run: ./tests/ci/run-command.ps1 -Name release_regressions -Executable npm.cmd -Arguments @('run', 'test:release'); exit $LASTEXITCODE
       - name: Chrome and Edge desktop matrix (8 scenarios, 80 grouped checks)
+        # Publication checks execute before deploy on main; live verification is a branch/PR check.
+        # Record actual published main separately from the candidate source under test.
         id: desktop
         run: ./tests/ci/run-command.ps1 -Name desktop -Executable npm.cmd -Arguments @('run', 'test:desktop', '--', 'ci-${{ github.run_id }}-${{ github.run_attempt }}'); exit $LASTEXITCODE
+      - name: Verify published main SVG maps and basic functions without deployment
+        if: github.ref != 'refs/heads/main'
+        id: live_release
+        run: ./tests/ci/run-command.ps1 -Name live_release -Executable npm.cmd -Arguments @('run', 'test:live'); exit $LASTEXITCODE
       - name: Finalize evidence even when checkout or setup failed
         id: evidence_finish
         if: always()

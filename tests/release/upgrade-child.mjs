@@ -5,6 +5,7 @@ import {chromium} from 'playwright';
 import {loadSites,siteServer,sha,assertRevisionChanged} from './site.mjs';
 import {monitorContext,assertOfflineRecovery} from '../desktop/diagnostics.mjs';
 import {withFailureEvidence,closeAfterEvidence} from '../browser-failure-evidence.mjs';
+import {assertSvgMapVisible,injectSvgMapFault} from './svg-map.mjs';
 const [out,channel,mode]=process.argv.slice(2);await fs.mkdir(out,{recursive:true});
 const sites=await loadSites();assertRevisionChanged(sites.old,sites.current);
 const server=await siteServer(sites,{oldFirst:true,staleWorker:mode==='stale'});
@@ -47,7 +48,7 @@ try{
   assert.equal(oldRuntime['app.js'],sha(sites.old.get('app.js')));assert.equal(oldRuntime['style.css'],sha(sites.old.get('style.css')));
   await fs.writeFile(path.join(out,'before.json'),JSON.stringify(before,null,2));await page.screenshot({path:path.join(out,'before.png')});
   pass('pinned-old-v042-with-case-photo-map',{oldRuntime,media:before.media,fingerprint:before.fingerprint});
-  const timeOrigin=await page.evaluate(()=>performance.timeOrigin);server.deploy();
+  const timeOrigin=await page.evaluate(()=>performance.timeOrigin);await server.deploy();
   await page.evaluate(async()=>await(await navigator.serviceWorker.getRegistration()).update());
   if(mode!=='stale'){
    await page.locator('#updateButton').waitFor({state:'visible'});
@@ -67,9 +68,11 @@ try{
   pass('new-complete-shell-active-old-cache-retired',{keys});
   phase='offline';const offlineUrl=server.url+'?upgrade-offline='+channel;
   await context.setOffline(true);await page.goto(offlineUrl);await field('header.caseNumber').waitFor();
-  const offline=await snapshot();assert.deepEqual(offline,before);
+  const offline=await snapshot();assert.deepEqual(offline,before);await fs.writeFile(path.join(out,'offline.json'),JSON.stringify(offline,null,2));
   await tab('photos');await page.locator('#annotationStage img').waitFor();await page.waitForFunction(()=>[...document.querySelectorAll('#annotationStage img')].every(i=>i.complete&&i.naturalWidth>0));
   await tab('map');await page.locator('#planStage svg').waitFor();await page.waitForFunction(()=>[...document.querySelectorAll('#planStage img')].every(i=>i.complete&&i.naturalWidth>0));
+  await injectSvgMapFault(page,mode);
+  record.svgMap=await assertSvgMapVisible(page,out,{mediaId:before.project.map.mediaId,sha256:sources[1].sha256,width:before.project.map.width,height:before.project.map.height});
   await page.screenshot({path:path.join(out,'offline-map.png')});await context.setOffline(false);phase='online';
   pass('offline-project-photo-and-map-retained',{fingerprint:offline.fingerprint});
   pass('strict-startup-through-offline-diagnostics',assertOfflineRecovery(diagnostics,{url:offlineUrl,workerUrl:server.url+'sw.js',readVerified:true}));
