@@ -12,7 +12,7 @@ import {assertSvgMapVisible, injectSvgMapFault} from './svg-map.mjs';
 import {syntheticImages} from './synthetic-images.mjs';
 import {createTransportGate} from './transport-gate.mjs';
 import {observeWorkers} from './worker-lifecycle.mjs';
-import {cleanupProfile, applyCleanupResult} from './profile-cleanup.mjs';
+import {finalizeLiveUpgrade} from './live-finalize.mjs';
 
 const [out, channel, mode, liveHead] = process.argv.slice(2);
 await fs.mkdir(out, {recursive: true});
@@ -34,7 +34,7 @@ const runtime = page => page.evaluate(async () => {
   for (const name of ['app.js', 'style.css']) result[name] = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await (await fetch('./' + name)).arrayBuffer()))].map(x => x.toString(16).padStart(2, '0')).join('');
   return result;
 });
-let seed, context, before, sources, gate;
+let seed, context, before, sources, gate, observer;
 try {
   await save();
   gate = await createTransportGate();
@@ -80,7 +80,7 @@ try {
   gate.setOnline(false, 'old-offline-before-browser-launch');
   context = await chromium.launchPersistentContext(profile, {channel, headless: true, offline: true, proxy: {server: gate.server}, viewport: {width: 1280, height: 900}});
   const page = context.pages()[0]; let phase = 'offline'; const startup = monitorContext(context, () => phase);
-  await observeWorkers(context, page, out, () => phase);
+  observer = await observeWorkers(context, page, out, () => phase);
   const field = key => page.locator('[data-field="' + key + '"]'), tab = name => page.locator('[data-tab="' + name + '"]').click();
   await withFailureEvidence({context, page, root: path.join(out, 'diagnostics'), name: 'upgrade'}, async () => {
     const startupUrl = sites.url + '?baseline-offline=' + channel;
@@ -128,10 +128,5 @@ try {
   record.browserVersion = context.browser() ? context.browser().version() : (await (await context.newCDPSession(page)).send('Browser.getVersion')).product;
 } catch (error) {record.status = 'failed'; record.error = {name: error.name, message: error.message, stack: error.stack}; console.error(error.stack); process.exitCode = 1;}
 finally {
-  if (gate) await fs.writeFile(path.join(out, 'transport-events.json'), JSON.stringify(gate.events, null, 2));
-  const cleanup = await cleanupProfile({profile, seed, context, gate, closeOwnedBrowser: true, failed: record.status === 'failed'});
-  if (applyCleanupResult(record, cleanup)) {
-    console.error('Persistent profile cleanup failure: ' + record.profileCleanupError); process.exitCode = 1;
-  }
-  record.endedUtc = new Date().toISOString(); await save();
+  if ((await finalizeLiveUpgrade({record, out, profile, seed, context, gate, observer})).failed) process.exitCode = 1;
 }

@@ -1,27 +1,35 @@
-import {appendFileSync, writeFileSync} from 'node:fs';
-import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
+import {createWorkerJournal, evidenceAttempt} from './evidence-io.mjs';
+import {capturePolicy} from '../browser-failure-evidence.mjs';
 
-export async function observeWorkers(context, page, out, phase) {
-  await fs.mkdir(out, {recursive: true});
+export async function observeWorkers(context, page, out, phase, options = {}) {
   const file = path.join(out, 'worker-lifecycle.jsonl');
-  writeFileSync(file, '', {flag: 'wx'});
-  const events = [];
-  const emit = (type, data) => {const event = {at: new Date().toISOString(), phase: phase(), type, data};
-    events.push(event); appendFileSync(file, JSON.stringify(event) + '\n');};
-  const worker = value => {emit('worker-observed', {url: value.url()}); value.on('close', () => emit('worker-closed', {url: value.url()}));};
-  context.on('serviceworker', worker); context.serviceWorkers().forEach(worker);
-  context.on('response', response => {
+  const journal = createWorkerJournal(file, options), {events} = journal, removers = [], pending = new Set();
+  let stopped = false;
+  const emit = (type, data) => {
+    if (stopped) return;
+    try {journal.emit({at: new Date().toISOString(), phase: phase(), type, data});}
+    catch (error) {journal.fail('event', error);}
+  };
+  const on = (target, name, callback) => {
+    const safe = value => {try {callback(value);} catch (error) {journal.fail(name, error);}};
+    target.on(name, safe); removers.push(() => target.off(name, safe));
+  };
+  const worker = value => {emit('worker-observed', {url: value.url()}); on(value, 'close', () => emit('worker-closed', {url: value.url()}));};
+  on(context, 'serviceworker', worker); context.serviceWorkers().forEach(worker);
+  on(context, 'response', response => {
     if (!new URL(response.url()).pathname.endsWith('/sw.js')) return;
     const observedPhase = phase();
-    response.body().then(bytes => emit('worker-script-body', {url: response.url(), responsePhase: observedPhase,
+    const task = Promise.resolve().then(() => response.body()).then(bytes => emit('worker-script-body', {url: response.url(), responsePhase: observedPhase,
       status: response.status(), fromServiceWorker: response.fromServiceWorker(), bytes: bytes.length,
-      sha256: createHash('sha256').update(bytes).digest('hex')}), error => emit('worker-script-body-unavailable', {message: error.message}));
+      sha256: createHash('sha256').update(bytes).digest('hex')}), error => emit('worker-script-body-unavailable', {message: error.message}))
+      .catch(error => journal.fail('worker-response', error));
+    pending.add(task); task.then(() => pending.delete(task));
   });
   const session = await context.newCDPSession(page);
   for (const name of ['workerRegistrationUpdated', 'workerVersionUpdated', 'workerErrorReported'])
-    session.on('ServiceWorker.' + name, data => emit('cdp-' + name, data));
+    on(session, 'ServiceWorker.' + name, data => emit('cdp-' + name, data));
   await session.send('ServiceWorker.enable');
   await context.exposeBinding('__tiltWorkerEvidence', (_, data) => emit('page-worker-lifecycle', data));
   await context.addInitScript(() => {
@@ -40,5 +48,13 @@ export async function observeWorkers(context, page, out, phase) {
       registration.addEventListener('updatefound', () => {send({event: 'updatefound'}); watch(registration.installing, 'installing');});
     }).catch(error => send({event: 'observer-error', message: error.message}));
   });
-  return {emit, session, events};
+  const seal = async (timeoutMs = capturePolicy.artifactMs) => {
+    for (const remove of removers) {try {remove();} catch (error) {journal.fail('detach', error);}}
+    const until = performance.now() + timeoutMs;
+    const result = await evidenceAttempt('worker-response-drain', () => Promise.all([...pending]), timeoutMs);
+    if (result.status !== 'saved') journal.fail('worker-response-drain', result.error);
+    stopped = true;
+    return journal.seal(Math.max(0, until - performance.now()));
+  };
+  return {emit, session, events, seal};
 }

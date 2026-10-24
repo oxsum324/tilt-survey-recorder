@@ -103,3 +103,17 @@ Chrome／Edge另以合成localhost舊殼、明確CDP更新及受控install邊界
 獨立啟動的持久瀏覽器明確選用Browser.close，避開Context.close的先行協定處理。
 一般context不自動關閉所屬browser。此路徑共用原2000ms預算，新增第13項回歸；
 真實Chrome／Edge的關閉與設定檔刪除仍須逐次通過，不能靠這項模擬代替。
+
+## 收尾與worker觀測器的寫入隔離
+
+`test:evidence-io`在本機及CI另跑12項回歸，不替換原13項可靠性測試。涵蓋transport／
+results寫入拒絕或無回應、worker初始化拒絕、同步throw／非同步reject／無回應、
+實際觀測器回呼與response.body延續、晚到寫入及正常順序；7個原生失敗子程序必須
+exit1、stderr保留原錯誤，實際合成profile仍刪除。單元I/O與EventEmitter注入不冒稱
+真實磁碟故障或真實CDP故障；完整Chrome／Edge套件另行執行。
+
+live先完成有界限清理，再保存transport／worker／results，任一寫入失敗不跳過其他
+寫入或取代既有錯誤。每項仍限原2000ms，metadata共享原12000ms，清理仍限原2000ms。
+worker回呼只排入非同步寫入佇列，錯誤保存於記憶體與stderr，不向外throw或留下未處理
+拒絕；封存前排空並移除觀測listener，`worker-observer.json`記錄完整性。失敗明列缺件，
+最後收據也寫不出時以stderr完整fallback保留；晚到結果不回填已封存收據為成功。

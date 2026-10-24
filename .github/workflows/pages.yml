@@ -78,6 +78,9 @@ jobs:
       - name: Regress export diagnostics, offline worker update boundary and bounded profile cleanup
         id: reliability
         run: ./tests/ci/run-command.ps1 -Name reliability -Executable npm.cmd -Arguments @('run', 'test:reliability'); exit $LASTEXITCODE
+      - name: Regress isolated final receipt and worker observer write failures
+        id: evidence_io
+        run: ./tests/ci/run-command.ps1 -Name evidence_io -Executable npm.cmd -Arguments @('run', 'test:evidence-io'); exit $LASTEXITCODE
       - name: Data tests (92)
         id: data
         run: ./tests/ci/run-command.ps1 -Name data -Executable npm.cmd -Arguments @('test'); exit $LASTEXITCODE
