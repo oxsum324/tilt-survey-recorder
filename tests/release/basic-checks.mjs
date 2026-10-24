@@ -11,7 +11,7 @@ export async function basicChecks({page,out,channel,head,appHash,site}) {
   page.on('pageerror',error=>diagnostics.pageErrors.push(error.message));
   page.context().on('response',response=>{const r={url:response.url(),status:response.status(),phase};diagnostics.responses.push(r);if(r.status>=400)diagnostics.httpErrors.push(r);});
   page.context().on('requestfailed',request=>diagnostics.requestFailures.push({url:request.url(),method:request.method(),resourceType:request.resourceType(),worker:request.serviceWorker()?.url()||null,error:request.failure(),phase}));
-  const result={channel,head,url:page.url(),startedUtc:new Date().toISOString(),checks,diagnostics,phoneTests:'deferred',realImportTests:'deferred',imagePdfValueReview:'deferred'};
+  const result={channel,head,url:site,initialPageUrl:page.url(),startedUtc:new Date().toISOString(),checks,diagnostics,phoneTests:'deferred',realImportTests:'deferred',imagePdfValueReview:'deferred'};
   let originalError;
   try {
     await page.setViewportSize({width:1280,height:900});
@@ -75,6 +75,6 @@ export async function basicChecks({page,out,channel,head,appHash,site}) {
     });
     result.status='passed';result.passed=checks.length;result.browserVersion=page.context().browser().version();
   }catch(error){originalError=error;result.status='failed';result.error={name:error.name,message:error.message,stack:error.stack};await page.screenshot({path:out+'/failure.png',fullPage:true}).catch(()=>{});throw error;}
-  finally{result.endedUtc=new Date().toISOString();try{await fs.writeFile(path.join(out,'results.json'),JSON.stringify(result,null,2));}catch(storageError){console.error('Release result storage failure: '+storageError.stack);if(!originalError)throw storageError;}}
+  finally{result.finalPageUrl=page.url();result.endedUtc=new Date().toISOString();try{await fs.writeFile(path.join(out,'results.json'),JSON.stringify(result,null,2));}catch(storageError){console.error('Release result storage failure: '+storageError.stack);if(!originalError)throw storageError;}}
   return result;
 }

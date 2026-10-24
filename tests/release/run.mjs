@@ -31,7 +31,7 @@ try{
   const result=await read(path.join(out,'results.json'));assert.equal(result.status,negative?'failed':'passed');
   if(negative){
    const scenario=basic?'basic':'upgrade',folder=path.join(out,'diagnostics',scenario),record=await read(path.join(folder,'failure.json'));
-   assert.deepEqual(record.captureErrors,[]);assert.equal(record.pageClosedAtFailure,false);assert.ok(record.artifactAttempts.every(a=>a.status==='saved'));
+   assert.deepEqual(record.captureErrors,[]);assert.equal(record.pageClosedAtFailure,false);assert.equal(record.artifactAttempts.length,4);assert.ok(record.artifactAttempts.every(a=>a.status==='saved'));
    const stderr=await fs.readFile(path.join(root,'commands',name,'stderr.log'),'utf8');
    assert.match(stderr,mode==='stale'?/runtime app.js must match new deployment/:/cold-start diagnostics/);
    assert.equal(record.originalError.name,mode==='stale'?'AssertionError':'Error');
@@ -40,6 +40,7 @@ try{
     const events=await read(path.join(folder,'events.json'));assert.ok(events.some(e=>e.type==='console'&&e.text==='injected-first-navigation-console-error'));
    }
   }
+  if(basic){assert.ok(result.url.startsWith('http://127.0.0.1:'));assert.ok(result.finalPageUrl.startsWith(result.url));}
   await pass(name,{rawExitCode:execution.rawExitCode,exitCode:execution.exitCode,expectedFailure:negative,checks:result.checks.length});
  }
  assert.equal(cases.length,9);

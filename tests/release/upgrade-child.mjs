@@ -30,6 +30,7 @@ try{
   await field('header.caseNumber').fill('舊V0.4.2升級－合成－'+channel);
   await page.waitForFunction(()=>document.documentElement.dataset.saveState==='saved');
   const images=await page.evaluate(()=>{const make=(color,w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,w,h);ctx.fillStyle='#000';ctx.fillText('SYNTHETIC',4,18);return c.toDataURL('image/png').split(',')[1];};return {photo:make('#c7e5dd',240,160),map:make('#eee5ca',320,200)};});
+  await fs.writeFile(path.join(out,'source-photo.png'),Buffer.from(images.photo,'base64'));await fs.writeFile(path.join(out,'source-map.png'),Buffer.from(images.map,'base64'));
   await tab('photos');await page.locator('#photoImport').setInputFiles({name:'synthetic-photo.png',mimeType:'image/png',buffer:Buffer.from(images.photo,'base64')});
   await page.locator('#annotationStage svg').waitFor();await page.waitForFunction(()=>document.documentElement.dataset.saveState==='saved');
   await tab('map');await page.locator('#mapImport').setInputFiles({name:'synthetic-map.png',mimeType:'image/png',buffer:Buffer.from(images.map,'base64')});
@@ -39,6 +40,10 @@ try{
   await page.waitForFunction(()=>document.querySelector('#offlineStatus').textContent.includes('離線資源已準備'));
   await page.evaluate(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(resolve=>navigator.serviceWorker.addEventListener('controllerchange',resolve,{once:true}));});
   const before=await snapshot(),oldRuntime=await runtime();assert.equal(before.media.length,2);assert.equal(before.project.pairs.length,2);
+  const sources=[{id:before.project.pairs[0].photos[0].mediaId,file:'source-photo.png',sha256:sha(Buffer.from(images.photo,'base64'))},
+   {id:before.project.map.mediaId,file:'source-map.png',sha256:sha(Buffer.from(images.map,'base64'))}];
+  for(const source of sources)assert.equal(before.media.find(m=>m.id===source.id).sha256,source.sha256);
+  await fs.writeFile(path.join(out,'media-sources.json'),JSON.stringify(sources,null,2));
   assert.equal(oldRuntime['app.js'],sha(sites.old.get('app.js')));assert.equal(oldRuntime['style.css'],sha(sites.old.get('style.css')));
   await fs.writeFile(path.join(out,'before.json'),JSON.stringify(before,null,2));await page.screenshot({path:path.join(out,'before.png')});
   pass('pinned-old-v042-with-case-photo-map',{oldRuntime,media:before.media,fingerprint:before.fingerprint});
