@@ -138,7 +138,14 @@ test('native write failure children exit one, retain stderr and original error a
     const stderr = await fs.readFile(path.join(root, 'commands', mode, 'stderr.log'), 'utf8');
     assert.match(stderr, /Live final fallback record:/); assert.match(stderr, /ORIGINAL IO STACK/);
     if (!mode.startsWith('results-')) assert.equal(JSON.parse(await fs.readFile(path.join(out, 'results.json'), 'utf8')).status, 'failed');
-    if (mode.startsWith('worker-')) assert.ok(observation.attempts.includes('worker-observer.json'));
+    if (mode.startsWith('worker-')) {
+      assert.ok(observation.attempts.includes('worker-observer.json'));
+      const observer = JSON.parse(await fs.readFile(path.join(out, 'worker-observer.json'), 'utf8'));
+      assert.deepEqual(observer, observation.record.workerObserver);
+      assert.equal(observer.status, 'failed'); assert.equal(observer.journal.status, 'incomplete');
+      assert.deepEqual(observer.events, [{type: 'injected-worker', data: 'SYNTHETIC'}]);
+      assert.ok(observer.errors.length > 0);
+    }
   }
   await passed('native-io-failure-exits-and-cleanup', {modes, rawExitCode: 1, syntheticProfilesActuallyRemoved: 7});
 });

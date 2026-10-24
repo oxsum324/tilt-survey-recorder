@@ -32,7 +32,12 @@ export async function finalizeLiveUpgrade({record, out, profile, seed, context, 
   };
   if (observer) {
     const result = await evidenceAttempt('worker-observer-seal', () => observer.seal(remaining()), remaining());
-    record.workerObserver = result.status === 'saved' ? result.value : result;
+    record.workerObserver = result.status === 'saved' ? result.value : {
+      status: 'failed', events: structuredClone(observer.events || []),
+      errors: [{stage: 'worker-observer-seal', error: result.error}],
+      journal: {file: 'worker-lifecycle.jsonl', status: 'incomplete'}, sealAttempt: result,
+    };
+    if (result.status !== 'saved') log('Worker observer evidence failure: ' + JSON.stringify(record.workerObserver.errors));
     if (record.workerObserver.status !== 'completed') fail('worker-observer', record.workerObserver);
   }
   await Promise.all([
