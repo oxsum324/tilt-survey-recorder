@@ -13,4 +13,6 @@ try {
  await withFailureEvidence({context,page,root:path.join(out,'diagnostics'),name:'basic'},()=>basicChecks({page,out,channel,
   head:sites.manifest.commit,appHash:sha(sites.current.get('app.js')),site:server.url}));
 }catch(error){console.error(error.stack);process.exitCode=1;}
-finally{await context.setOffline(false).catch(()=>{});await closeAfterEvidence(context);await closeAfterEvidence(browser);await server.close();}
+// This child owns the browser. Close it directly within the original budget;
+// context protocol disposal and network restoration cannot block browser cleanup.
+finally{try{await closeAfterEvidence(browser);}finally{await server.close();}}
