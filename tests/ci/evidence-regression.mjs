@@ -52,6 +52,10 @@ for (const name of ['data', 'browser', 'site_build', 'desktop', 'ci_regressions'
   assert.match(step(name), new RegExp(`run-command\\.ps1 -Name ${name} -Executable`));
 }
 assert.match(step('ci_regressions'), /test:ci-evidence/);
+assert.match(step('release_regressions'), /run-command\.ps1 -Name release_regressions/);
+assert.match(step('release_regressions'), /test:release/);
+assert.ok(ids.indexOf('release_regressions') > ids.indexOf('site_build'));
+assert.ok(ids.indexOf('release_regressions') < ids.indexOf('desktop'));
 assert.match(workflow, /needs: checks/);
 assert.equal((workflow.match(/if: github\.ref == 'refs\/heads\/main' && github\.event_name != 'pull_request'/g) || []).length, 2);
 
