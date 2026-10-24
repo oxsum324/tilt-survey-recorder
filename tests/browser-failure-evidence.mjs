@@ -141,7 +141,11 @@ export async function withFailureEvidence({context, page, name, root = failureEv
           readyState: document.readyState, caseNumber: [...document.querySelectorAll('[data-field="header.caseNumber"]')].map(e => ({
             html: e.outerHTML, display: getComputedStyle(e).display, visibility: getComputedStyle(e).visibility,
             rect: {x: e.getBoundingClientRect().x, y: e.getBoundingClientRect().y,
-              width: e.getBoundingClientRect().width, height: e.getBoundingClientRect().height}}))})), value => JSON.stringify(value, null, 2)),
+              width: e.getBoundingClientRect().width, height: e.getBoundingClientRect().height}})),
+          disclosures: [...document.querySelectorAll('details[data-ui-disclosure]')].map(e => ({key: e.dataset.uiDisclosure, open: e.open, html: e.outerHTML})),
+          disclosureStorage: (() => { try { return {preferences: localStorage.getItem('tilt-survey-disclosures'),
+            journal: JSON.parse(sessionStorage.getItem('tilt-test-disclosure-journal') || '[]')};
+            } catch (error) { return {error: String(error)}; } })()})), value => JSON.stringify(value, null, 2)),
       attempt('page.html', () => page.content()),
       attempt('screenshot.png', () => page.screenshot({fullPage: true, timeout: policy.artifactMs})),
       attempt('trace.zip', async () => {

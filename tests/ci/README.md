@@ -88,7 +88,7 @@ npm.cmd run test:browser-evidence
 正式八情境診斷預設 `output/playwright/failure-evidence/<unique-run>/`；
 `TILT_BROWSER_FAILURE_ROOT` 可指定全新父目錄。兩者均納入現有 CI output 附件路徑。
 
-這次只套用於曾發生首頁等待逾時的 review-followups 八情境，不宣稱其他八支腳本已有同等保存。
+失敗取證套用於 review-followups 八情境，並已追加 mobile-layout 全流程；不宣稱其他七支腳本已有同等保存。
 trace 記錄瀏覽器操作與網路，不記錄 Node assert 的判定；原例外與命令日誌另外保存。
 本機回歸不代表雲端 CI、GitHub 上傳或第一次歷史逾時根因已驗證。
 runner 硬性終止或磁碟不可寫仍可能無法完整取證；頁面無回應的等待現已設獨立期限。
@@ -119,3 +119,26 @@ failure.json／events.json／result.json 各自隔離寫入；首份 failure.jso
 真實 renderer 回歸先取得原 locator TimeoutError，再使 renderer 忙迴圈無回應，測的是失敗取證分支。
 暫存檔使用不以句點開頭的 pending-...pending 名稱，避免 upload-artifact v4 預設排除隱藏檔；
 回歸核對暫存檔確實存在、不是隱藏檔名，且不混入有效附件 SHA 清冊。雲端實際上傳仍待執行。
+
+### 收合保存與 mobile-layout 失敗取證
+
+mobile-layout 的收合測試在 reload 前同時等待 `details.open === false` 與同一
+`data-ui-disclosure` 偏好鍵已保存 `false`；原 15000 ms poll、重開後 `open` 屬性必須不存在、
+案件／計算快照不變等斷言保留。展開路徑的原儲存斷言也不移除，不以固定 sleep 代替完成條件。
+
+測試專用 probe 不變更產品偏好值，記錄 click、toggle、偏好實際寫入、pagehide 與
+reload 前後 checkpoint。跨導覽 journal 留在隔離 context 的 sessionStorage，另寫入
+已觀測的 console 事件；失敗時 page-state.json 保存目前 details、原始偏好與 journal。
+原 HTML／PNG／trace、逐檔 SHA、取證期限、寫入隔離及原錯誤身分保留政策不變。
+
+既有 `test:browser-evidence` 在原十類之後執行 `disclosure-regressions.mjs`，新增三類另計：
+
+- 真實瀏覽器將保存刻意扣住數個繪製影格，確認等待不能提早完成，釋放後才能重開且仍收合。
+- 永不完成的保存必須拒絕，即使 DOM 已收合也不能算成功。
+- 真實應用合成案件注入一次保存遺失，確認原 AssertionError／exit 1 不變，關閉前仍取得
+  DOM、偏好、事件順序、HTML、PNG、trace 與 SHA；子程序不能靠 watchdog 強殺通過。
+
+三類各跑 Chrome／Edge，共六組；結果在 `output/playwright/disclosure-regressions/<run>/`
+（或 `TILT_DISCLOSURE_REGRESSION_ROOT` 指定的新目錄），不併入原十類、101 或八情境 80。
+250 ms 短期限僅屬合成反例；正式 mobile-layout 的等待期限不變。原七個 npm 命令及 workflow
+字串不變，CI 既有命令與附件路徑直接涵蓋新增回歸。成功的 probe／guard 收據仍不是手機實機驗收。

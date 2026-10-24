@@ -216,3 +216,6 @@ test('total capture budget limits all stalled artifacts and retains a failed fal
   await fs.writeFile(path.join(root, name, 'unit-fallback-observation.json'), JSON.stringify({record, logs}, null, 2));
   await passed('total-capture-budget', {scope: 'unit simulation; final metadata cannot finish after budget expiry'});
 });
+
+// Separate results and counts; the ten existing families above remain unchanged.
+await import('./disclosure-regressions.mjs');
