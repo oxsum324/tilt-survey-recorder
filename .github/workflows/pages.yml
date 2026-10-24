@@ -80,6 +80,9 @@ jobs:
       - name: Build local site at the tested commit
         id: site_build
         run: ./tests/ci/run-command.ps1 -Name site_build -Executable node -Arguments @('build-site.mjs'); exit $LASTEXITCODE
+      - name: Regress old V0.4.2 upgrades and first-navigation evidence
+        id: release_regressions
+        run: ./tests/ci/run-command.ps1 -Name release_regressions -Executable npm.cmd -Arguments @('run', 'test:release'); exit $LASTEXITCODE
       - name: Chrome and Edge desktop matrix (8 scenarios, 80 grouped checks)
         id: desktop
         run: ./tests/ci/run-command.ps1 -Name desktop -Executable npm.cmd -Arguments @('run', 'test:desktop', '--', 'ci-${{ github.run_id }}-${{ github.run_attempt }}'); exit $LASTEXITCODE

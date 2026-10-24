@@ -1,0 +1,141 @@
+{
+  "version": "0.4.2",
+  "sourceCommit": "4c32e09c8d2960dd062906da035c82d5e8a61172",
+  "files": [
+    {
+      "name": "index.html",
+      "bytes": 4240,
+      "sha256": "b3600d2819a353427933fb8f7a779d4f0155005aee95280b7d5a0957512ad67b"
+    },
+    {
+      "name": "app.js",
+      "bytes": 42893,
+      "sha256": "7950c133aced49de16e915f33cbbe521d66739b659911a2c34a817cb6043ac8c"
+    },
+    {
+      "name": "model.js",
+      "bytes": 4388,
+      "sha256": "8bcb9e8cb6462ba1bb84151ce7d8d92f8533dd865c95f0b923c3d71fbcff5254"
+    },
+    {
+      "name": "integrity.js",
+      "bytes": 2623,
+      "sha256": "a68727afa838471aeb8533e474208c2d056697740dac5c69aa1de34240f3969b"
+    },
+    {
+      "name": "calc.js",
+      "bytes": 7864,
+      "sha256": "22066634d29cc125b69daddd9e399b13c45dd7f5a08c50697f42cc89cef2ba11"
+    },
+    {
+      "name": "sketch.js",
+      "bytes": 8398,
+      "sha256": "24db25166a7d4294fb00b96fc2ce9ec6d439ed15e9cd01b0ac19f80df38518cc"
+    },
+    {
+      "name": "report.js",
+      "bytes": 8594,
+      "sha256": "03054bce45b5ea895a3a7c90a90649d7a47012bc4848ea9176ef66098ace34f4"
+    },
+    {
+      "name": "store.js",
+      "bytes": 11025,
+      "sha256": "0983037a8ac24de2891ae35a024e64cda5fd610a4118dec9fc0974d2dfa08e07"
+    },
+    {
+      "name": "style.css",
+      "bytes": 26620,
+      "sha256": "a24acc252e53c8499e4bcb245d4158b3cd400f02912cd6922a6683f6bd706330"
+    },
+    {
+      "name": "sw.js",
+      "bytes": 2518,
+      "sha256": "8237cff89cfb0326433ddfa7ce730c643cddf7f5b177519a13163cd291bd8034"
+    },
+    {
+      "name": "manifest.webmanifest",
+      "bytes": 721,
+      "sha256": "b5bf611045f0406d9e0fa87b5dccc0e9d66fd08bed93fe9d42c733a4b106a5b1"
+    },
+    {
+      "name": "icon.svg",
+      "bytes": 457,
+      "sha256": "95d2b0c7ae2d1dd0e164af9e92b679790ead258bd84ef2933f4f029c6c7ea008"
+    },
+    {
+      "name": "icon-180.png",
+      "bytes": 3389,
+      "sha256": "7c20a311cb460f01629f86a025bf8b2816584b32549a812aa322aa9351b2e6bc"
+    },
+    {
+      "name": "icon-192.png",
+      "bytes": 3109,
+      "sha256": "afa76873c1318d82f2aad41a243eba700816b1b24a1131a87e9aa539fee525e0"
+    },
+    {
+      "name": "icon-512.png",
+      "bytes": 9342,
+      "sha256": "d46cdf76ecf4f5645b2d8e3bfc85ea3a7d10007488c71eb150d922983fb1d393"
+    },
+    {
+      "name": "annotation-geometry.js",
+      "bytes": 1826,
+      "sha256": "9feff742b34e9fb1e77766e5aa79b041e3ff985cf561b966de871bf46b3e8816"
+    },
+    {
+      "name": "annotation.js",
+      "bytes": 8586,
+      "sha256": "7e416217e77044b778cc5e0172db0712a1e4614b4599396c122bbd808c1958c5"
+    },
+    {
+      "name": "exif.js",
+      "bytes": 3345,
+      "sha256": "2f9b104a4e7e2ba968ad20e07838a85716fdc9b2785edc4d31bff9241020e829"
+    },
+    {
+      "name": "media.js",
+      "bytes": 2466,
+      "sha256": "31bccab3734ecf52c8cdd1ff0132e9be0c40a1aabecfed310e48a005be96941a"
+    },
+    {
+      "name": "media-ui.js",
+      "bytes": 16815,
+      "sha256": "5475e1caa53430c5a4cf90081bb8288ac62a558fdea5ca578ab50fd706dce7fa"
+    },
+    {
+      "name": "plan.js",
+      "bytes": 5763,
+      "sha256": "a41c83f37d2b9a363bee9db2aac69de374258113cd04a3662e0e53c4679b4e51"
+    },
+    {
+      "name": "media-report.js",
+      "bytes": 4491,
+      "sha256": "f5da53e8b51677176e9c639ac16fa2cf5923bb8b7b9367971f053e6e5fa1ee59"
+    },
+    {
+      "name": "pdf.js",
+      "bytes": 2425,
+      "sha256": "f88b66c88855d3d40ef997b6ad0d60843904ea1de745c483ad3301da051c84b2"
+    },
+    {
+      "name": "display.js",
+      "bytes": 1944,
+      "sha256": "229549f0ee6be9fcfc278e4db4e96f2e7ceb99b6f85045804d61d68fe8a147e0"
+    },
+    {
+      "name": "vendor/html2pdf.bundle.min.js",
+      "bytes": 946030,
+      "sha256": "9563c45f032179c73454293a649929e60fc24c05a326e8ab2811cfa8f25c3607"
+    },
+    {
+      "name": "vendor/html2pdf-LICENSE.txt",
+      "bytes": 1074,
+      "sha256": "8ad8643de802761474f3db9d44441ff9d46848a166ed27a8b721831c7a277459"
+    },
+    {
+      "name": "vendor/html2pdf.bundle.min.js.LICENSE.txt",
+      "bytes": 82748,
+      "sha256": "b4e53e0d09934124c7c156d3f4d23fe04df9461838cc48b5013008f8c6e422fd"
+    }
+  ]
+}

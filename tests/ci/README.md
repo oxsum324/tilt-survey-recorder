@@ -144,3 +144,10 @@ reload 前後 checkpoint。跨導覽 journal 留在隔離 context 的 sessionSto
 （或 `TILT_DISCLOSURE_REGRESSION_ROOT` 指定的新目錄），不併入原十類、101 或八情境 80。
 250 ms 短期限僅屬合成反例；正式 mobile-layout 的等待期限不變。原七個 npm 命令及 workflow
 字串不變，CI 既有命令與附件路徑直接涵蓋新增回歸。成功的 probe／guard 收據仍不是手機實機驗收。
+
+### 同版本快取更新補修
+
+上述為既有交付歷史；本輪保留原七個命令字串，另加 `test:release` 與
+`release_regressions` CI步驟。它在本次建置後執行固定舊V0.4.2升級、案件／媒體保留、
+故意沿用舊worker反例、首次導覽前監控及失敗非零退出／stderr保存，詳見
+[發布回歸說明](../release/README.md)。原14類仍獨立執行並保持原計數。

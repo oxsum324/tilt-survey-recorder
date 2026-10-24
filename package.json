@@ -10,7 +10,8 @@
     "test:desktop": "node tests/desktop/run-local.mjs",
     "test:ci-evidence": "node tests/ci/evidence-regression.mjs",
     "test:workflow": "node tests/ci/workflow-semantics.mjs",
-    "test:browser-evidence": "node --test tests/browser-failure-evidence.test.mjs"
+    "test:browser-evidence": "node --test tests/browser-failure-evidence.test.mjs",
+    "test:release": "node --test tests/release/command.test.mjs && node tests/release/run.mjs"
   },
   "devDependencies": {
     "playwright": "1.58.2"
