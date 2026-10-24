@@ -7,17 +7,26 @@ export const ioError = error => ({name: error?.name || 'Error', message: String(
   code: error?.code || null, stack: error?.stack || null});
 export const stderrFallback = value => {try {console.error(value);} catch { /* No observer may throw into its caller. */ }};
 
-export async function evidenceAttempt(name, operation, timeoutMs = capturePolicy.artifactMs) {
+export async function evidenceAttempt(name, operation, timeoutMs = capturePolicy.artifactMs,
+  {clock = () => performance.now(), schedule = setTimeout, cancel = clearTimeout} = {}) {
   let timer;
   try {
     if (timeoutMs <= 0) throw Object.assign(Error(name + ': evidence deadline exceeded'), {code: 'EVIDENCE_TIMEOUT'});
+    const until = clock() + timeoutMs;
     const value = await Promise.race([Promise.resolve().then(operation), new Promise((_, reject) => {
-      timer = setTimeout(() => reject(Object.assign(Error(name + ': evidence deadline exceeded'), {code: 'EVIDENCE_TIMEOUT'})), timeoutMs);
+      const expire = () => {
+        const remaining = until - clock();
+        // Node timers may wake early. Keep the same absolute deadline, and never
+        // declare a timeout before the monotonic clock has actually reached it.
+        if (remaining > 0) {timer = schedule(expire, Math.ceil(remaining)); return;}
+        reject(Object.assign(Error(name + ': evidence deadline exceeded'), {code: 'EVIDENCE_TIMEOUT'}));
+      };
+      timer = schedule(expire, Math.ceil(timeoutMs));
     })]);
     return {name, status: 'saved', value};
   } catch (error) {
     return {name, status: error?.code === 'EVIDENCE_TIMEOUT' ? 'timed-out' : 'failed', error: ioError(error)};
-  } finally {clearTimeout(timer);}
+  } finally {cancel(timer);}
 }
 
 // A late write can only leave a pending file; it cannot publish a successful receipt.

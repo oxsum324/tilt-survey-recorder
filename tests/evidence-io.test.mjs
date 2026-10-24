@@ -6,7 +6,7 @@ import {EventEmitter} from 'node:events';
 import {randomUUID, createHash} from 'node:crypto';
 import {capturePolicy} from './browser-failure-evidence.mjs';
 import {finalizeLiveUpgrade} from './release/live-finalize.mjs';
-import {createWorkerJournal, writeEvidence} from './release/evidence-io.mjs';
+import {createWorkerJournal, writeEvidence, evidenceAttempt} from './release/evidence-io.mjs';
 import {observeWorkers} from './release/worker-lifecycle.mjs';
 import {runCaptured} from './release/command.mjs';
 import {executionOrigin} from './execution-origin.mjs';
@@ -42,7 +42,7 @@ test('unresponsive transport writer retains the original artifact deadline and s
     write: file => path.basename(file) === 'transport-events.json' ? new Promise(() => {}) : (saved = true, Promise.resolve({status: 'saved'}))});
   const elapsedMs = performance.now() - start;
   assert.ok(cleaned && saved); assert.equal(record.error, error); assert.equal(record.evidenceErrors[0].status, 'timed-out');
-  assert.ok(elapsedMs >= capturePolicy.artifactMs && elapsedMs < 3000);
+  assert.ok(elapsedMs >= capturePolicy.artifactMs && elapsedMs < 3000, JSON.stringify({elapsedMs, artifactMs: capturePolicy.artifactMs}));
   await passed('transport-unresponsive-deadline', {elapsedMs, artifactMs: capturePolicy.artifactMs});
 });
 
@@ -150,6 +150,18 @@ test('normal async worker journal preserves ordered real bytes and seals success
   const lines = (await fs.readFile(file, 'utf8')).trim().split('\n').map(JSON.parse);
   assert.deepEqual(lines, receipt.events); assert.equal(lines.length, 50);
   await passed('real-journal-ordered-success', {lines: lines.length});
+});
+
+test('an early timer wakeup cannot declare expiry before the unchanged monotonic deadline', async () => {
+  let now = 0; const delays = [], canceled = [];
+  const receipt = await evidenceAttempt('early-wakeup', () => new Promise(() => {}), 2000, {
+    clock: () => now, cancel: timer => canceled.push(timer),
+    schedule: (callback, delay) => {delays.push(delay); const id = delays.length;
+      queueMicrotask(() => {now = id === 1 ? 1999 : 2000; callback();}); return id;},
+  });
+  assert.deepEqual(delays, [2000, 1]); assert.deepEqual(canceled, [2]);
+  assert.equal(now, 2000); assert.equal(receipt.status, 'timed-out');
+  await passed('monotonic-early-wakeup', {requestedDeadlineMs: 2000, firstWakeMs: 1999, expiryMs: now, delays});
 });
 
 test.after(async () => {
