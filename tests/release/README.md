@@ -35,7 +35,8 @@
 原圖成功解碼、尺寸／SHA符合案件媒體、畫面可見且未被遮擋。
 實際SVG href與保留原檔解碼後全部64,000像素逐色核對，最大色差不得超過4。
 保存實際SVG截圖，從截圖三個位置取RGBA，逐色差不得超過4，與原圖同位置像素核對。
-這些位置取自本套合成底圖平色區，不是一般圖片的視覺辨識替代品。
+三個位置各有紅、綠、藍色特徵，必須符合指定RGBA；整圖解碼比較及原色差界限4保留。
+這仍是合成底圖的特徵點檢查，不是一般圖片或整張畫面的視覺辨識替代品。
 
 另外加入Chrome／Edge各兩組：移除SVG image、破損PNG；必須各以指定斷言／解碼錯誤
 原生exit1，不能使用逾時或watchdog。失敗當下四附件及stderr保存，案件、媒體與離線
@@ -53,3 +54,23 @@ manifest／27檔，再於隔離持久設定檔用固定舊fixture建立舊worker
 
 CI於分支／PR增加獨立live_release取證步驟；main的部署前CI跳過此步驟，避免在
 Pages尚未部署新main時要求它已上線。既有checks／build／deploy門檻維持不變。
+
+## 成功結束的trace與局部遮蔽回歸
+
+guard只啟動一次trace export，先寫非隱藏`.pending`檔。成功結束的原兩秒期限不變；
+逾時仍原生失敗，失敗取證在原artifact／總期限內等待同一個export promise，不能再次stop。
+只有完整成功後才刪除暫存trace。若export永不完成或失敗，其他附件仍獨立嘗試保存，
+明列trace缺件，不以pending或重跑冒稱完整；超過失敗取證期限的完成不會改寫正式附件。
+
+`test:trace-completion`在本機及CI獨立執行7項新增回歸；兩項真實瀏覽器注入模式各跑
+Chrome／Edge，完成動作後在native export前／後延遲2250ms，要求原期限失敗、stop一次、
+四附件完整及原錯誤／stderr不變。其餘模擬明列為unit simulation，不冒稱真實trace。
+原14類回歸及原成功案例不留failure trace的斷言均保留。
+
+Chrome／Edge在staged與live各加局部遮蔽反例：只覆蓋第一色塊，保留完整href、
+64,000解碼像素及中心命中，必須由原實際截圖像素斷言失敗，另外兩色不變。
+原13組staged及8組live保留，新增後為15組staged／10組live，各自的基本檢查仍32項。
+移除、破損反例的原指定錯誤與非零退出斷言保留。
+
+子收據的`scope`及`execution`記實際本機／GitHub環境、run、attempt、job與工作流程SHA；
+合成／staged／live與靜態驗證範圍另列，避免將雲端執行誤標成本機。

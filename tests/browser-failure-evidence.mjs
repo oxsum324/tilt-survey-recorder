@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import {executionOrigin} from './execution-origin.mjs';
 
 const run = `${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}-${randomUUID()}`;
 export const failureEvidenceRoot = path.resolve(process.env.TILT_BROWSER_FAILURE_ROOT ||
@@ -65,10 +66,29 @@ export async function withFailureEvidence({context, page, name, root = failureEv
   observe(context, 'response', response => ({url: response.url(), status: response.status(), fromServiceWorker: response.fromServiceWorker()}));
   observe(context, 'requestfailed', request => ({url: request.url(), method: request.method(),
     resourceType: request.resourceType(), serviceWorker: request.serviceWorker()?.url() || null, failure: request.failure()}));
-  const record = {schema: 1, scope: 'local-browser-diagnostics; not a GitHub cloud run',
+  const record = {schema: 1, ...executionOrigin(), targetScope: 'browser diagnostics; synthetic fixtures are labelled by their caller',
     head: execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(), name,
     attachedUtc: new Date().toISOString(), status: 'running', captureErrors: [], policy};
   let tracing = false;
+  const tracePending = path.join(out, `pending-trace-${randomUUID()}.pending`);
+  let traceStop;
+  const stopTrace = () => {
+    // A deadline races the operation; it cannot cancel it. Reuse this exact promise
+    // during failure capture instead of stopping/discarding the same trace twice.
+    if (!traceStop) {
+      if (!tracing) throw new Error('Trace was not started');
+      record.traceStop = {calls: 1, status: 'running', startedUtc: new Date().toISOString(),
+        stagedFile: path.basename(tracePending)};
+      traceStop = Promise.resolve().then(() => context.tracing.stop({path: tracePending})).then(() => {
+        tracing = false; record.traceStop.status = 'completed';
+        record.traceStop.finishedUtc = new Date().toISOString();
+      }, error => {
+        record.traceStop.status = 'failed'; record.traceStop.error = errorRecord(error);
+        record.traceStop.finishedUtc = new Date().toISOString(); throw error;
+      });
+    }
+    return traceStop;
+  };
   const manifest = async () => {
     const files = [];
     for (const entry of await fs.readdir(out, {withFileTypes: true})) {
@@ -84,12 +104,15 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     await timed('tracing.start', () => context.tracing.start({screenshots: true, snapshots: true, sources: true}), policy.artifactMs);
     tracing = true;
     const value = await action();
-    await timed('tracing.stop', () => context.tracing.stop(), policy.artifactMs); // Successful cases keep event receipts, not a failure trace.
+    await timed('tracing.stop', stopTrace, policy.artifactMs);
     tracing = false;
     record.status = 'passed'; record.finishedUtc = new Date().toISOString();
     await json(path.join(out, 'events.json'), events);
     await json(path.join(out, 'result.json'), record);
     await manifest();
+    // Only after all successful receipts are written may the staged trace be discarded.
+    // A timed-out stop leaves its original bytes available to the failure path below.
+    await fs.rm(tracePending);
     return value;
   } catch (error) {
     alreadyFailed.add(context);
@@ -135,7 +158,6 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     try {
       await writeRecord('failure.json', record, 'initial');
       await writeRecord('events.json', events, 'initial');
-      const tracePending = path.join(out, `pending-trace-${randomUUID()}.pending`);
       await Promise.all([
       attempt('page-state.json', () => page.evaluate(() => ({url: location.href, title: document.title,
           readyState: document.readyState, caseNumber: [...document.querySelectorAll('[data-field="header.caseNumber"]')].map(e => ({
@@ -149,8 +171,7 @@ export async function withFailureEvidence({context, page, name, root = failureEv
       attempt('page.html', () => page.content()),
       attempt('screenshot.png', () => page.screenshot({fullPage: true, timeout: policy.artifactMs})),
       attempt('trace.zip', async () => {
-        if (!tracing) throw new Error('Trace was not started');
-        await context.tracing.stop({path: tracePending}); tracing = false;
+        await stopTrace();
         return fs.readFile(tracePending);
       }),
       ]);

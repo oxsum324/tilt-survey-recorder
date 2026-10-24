@@ -69,8 +69,12 @@ jobs:
         id: browser_diagnostic_regressions
         run: ./tests/ci/run-command.ps1 -Name browser_diagnostic_regressions -Executable npm.cmd -Arguments @('run', 'test:browser-evidence'); exit $LASTEXITCODE
       - name: Regress CI evidence failure scenarios
+        # Trace completion regressions are separate from the fourteen existing diagnostics.
         id: ci_regressions
         run: ./tests/ci/run-command.ps1 -Name ci_regressions -Executable npm.cmd -Arguments @('run', 'test:ci-evidence'); exit $LASTEXITCODE
+      - name: Regress single trace export deadlines and execution provenance
+        id: trace_completion
+        run: ./tests/ci/run-command.ps1 -Name trace_completion -Executable npm.cmd -Arguments @('run', 'test:trace-completion'); exit $LASTEXITCODE
       - name: Data tests (92)
         id: data
         run: ./tests/ci/run-command.ps1 -Name data -Executable npm.cmd -Arguments @('test'); exit $LASTEXITCODE

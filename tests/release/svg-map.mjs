@@ -61,6 +61,9 @@ export async function assertSvgMapVisible(page, out, expected) {
     'Decoded SVG href pixels must match retained map pixels');
   assert.ok(source.visible && source.hit && source.rect.width > 0 && source.rect.height > 0,
     'SVG map image must be visible and unobscured on screen');
+  assert.deepEqual(source.points.map(point => point.rgba),
+    [[212, 60, 53, 255], [35, 134, 75, 255], [49, 91, 212, 255]],
+    'SVG map must contain three distinct retained color features');
 
   const png = await svg.screenshot({path: path.join(out, 'svg-map-display.png')});
   const painted = await svg.evaluate(async (element, data) => {
@@ -78,6 +81,9 @@ export async function assertSvgMapVisible(page, out, expected) {
     });
   }, {png: png.toString('base64'), points: source.points});
   assert.equal(painted.length, 3);
+  // Preserve the successful source checks and actual sample values even when paint fails.
+  await fs.writeFile(path.join(out, 'svg-map-observation.json'), JSON.stringify({source, painted,
+    screenshot: 'svg-map-display.png', status: 'observed-before-paint-assertion'}, null, 2));
   for (let index = 0; index < painted.length; index++) {
     assert.ok(painted[index].rgba.every((value, channel) => Math.abs(value - source.points[index].rgba[channel]) <= 4),
       'Actual SVG screenshot pixels must match decoded map pixels');
@@ -92,5 +98,16 @@ export async function injectSvgMapFault(page, mode) {
   if (mode === 'map-corrupt') await page.locator('#planStage svg image').evaluate(element => {
     const blob = new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], {type: 'image/png'});
     element.setAttribute('href', URL.createObjectURL(blob));
+  });
+  if (mode === 'map-occluded') await page.locator('#planStage svg image').evaluate(element => {
+    // Cover only the first feature. The center remains unobscured and the href/raw
+    // pixels stay correct, so only the actual painted-output assertion can reject it.
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    const width = element.width.baseVal.value, height = element.height.baseVal.value;
+    const x = element.x.baseVal.value + width * (0.3 - 20 / 320);
+    const y = element.y.baseVal.value + height * (0.3 - 15 / 200);
+    for (const [name, value] of Object.entries({x, y, width: width * 40 / 320, height: height * 30 / 200,
+      fill: '#ffffff', 'pointer-events': 'none', 'data-test-occlusion': 'first-color-feature'})) rect.setAttribute(name, String(value));
+    element.parentElement.append(rect);
   });
 }

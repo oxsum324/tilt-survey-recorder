@@ -16,9 +16,22 @@ export async function runMapNegative({root, channel, mode, liveHead}) {
   assert.equal(proof.pageClosedAtFailure, false); assert.deepEqual(proof.captureErrors, []);
   assert.equal(proof.artifactAttempts.length, 4); assert.ok(proof.artifactAttempts.every(a => a.status === 'saved'));
   const expected = mode === 'map-missing' ? /SVG map must contain exactly one image/ : /SVG map source decode failed/;
+  const intended = mode === 'map-occluded' ? /Actual SVG screenshot pixels must match decoded map pixels/ : expected;
   const stderr = await fs.readFile(path.join(root, 'commands', name, 'stderr.log'), 'utf8');
-  assert.match(stderr, expected); assert.match(result.error.message, expected);
-  assert.equal(result.error.name, mode === 'map-missing' ? 'AssertionError' : 'Error');
+  if (mode !== 'map-occluded') {
+    assert.match(stderr, expected); assert.match(result.error.message, expected);
+    assert.equal(result.error.name, mode === 'map-missing' ? 'AssertionError' : 'Error');
+  } else {
+    assert.match(stderr, intended); assert.match(result.error.message, intended);
+    assert.equal(result.error.name, 'AssertionError');
+  }
+  if (mode === 'map-occluded') {
+    const observation = await read(path.join(out, 'svg-map-observation.json'));
+    assert.equal(observation.source.maxDecodedDifference, 0); assert.equal(observation.source.hit, true);
+    assert.equal(observation.source.pixelsCompared, 64000);
+    assert.deepEqual(observation.painted[0].rgba, [255, 255, 255, 255]);
+    assert.deepEqual(observation.painted.slice(1).map(p => p.rgba), observation.source.points.slice(1).map(p => p.rgba));
+  }
   const before = await read(path.join(out, 'before.json'));
   assert.deepEqual(await read(path.join(out, 'after.json')), before);
   assert.deepEqual(await read(path.join(out, 'offline.json')), before);

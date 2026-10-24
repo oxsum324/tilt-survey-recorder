@@ -6,6 +6,7 @@ import {loadSites,siteServer,sha,assertRevisionChanged} from './site.mjs';
 import {monitorContext,assertOfflineRecovery} from '../desktop/diagnostics.mjs';
 import {withFailureEvidence,closeAfterEvidence} from '../browser-failure-evidence.mjs';
 import {assertSvgMapVisible,injectSvgMapFault} from './svg-map.mjs';
+import {syntheticImages} from './synthetic-images.mjs';
 const [out,channel,mode]=process.argv.slice(2);await fs.mkdir(out,{recursive:true});
 const sites=await loadSites();assertRevisionChanged(sites.old,sites.current);
 const server=await siteServer(sites,{oldFirst:true,staleWorker:mode==='stale'});
@@ -30,7 +31,7 @@ try{
   await page.getByText('合成示例已載入，可直接預覽成果表。',{exact:true}).waitFor();
   await field('header.caseNumber').fill('舊V0.4.2升級－合成－'+channel);
   await page.waitForFunction(()=>document.documentElement.dataset.saveState==='saved');
-  const images=await page.evaluate(()=>{const make=(color,w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,w,h);ctx.fillStyle='#000';ctx.fillText('SYNTHETIC',4,18);return c.toDataURL('image/png').split(',')[1];};return {photo:make('#c7e5dd',240,160),map:make('#eee5ca',320,200)};});
+   const images=await page.evaluate(syntheticImages);
   await fs.writeFile(path.join(out,'source-photo.png'),Buffer.from(images.photo,'base64'));await fs.writeFile(path.join(out,'source-map.png'),Buffer.from(images.map,'base64'));
   await tab('photos');await page.locator('#photoImport').setInputFiles({name:'synthetic-photo.png',mimeType:'image/png',buffer:Buffer.from(images.photo,'base64')});
   await page.locator('#annotationStage svg').waitFor();await page.waitForFunction(()=>document.documentElement.dataset.saveState==='saved');

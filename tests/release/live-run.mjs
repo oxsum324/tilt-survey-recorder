@@ -34,7 +34,11 @@ try {
       const proof = await runMapNegative({root, channel, mode, liveHead}); await pass(proof.name, proof.data);
     }
   }
-  assert.equal(cases.length, 8); record.status = 'passed';
+  assert.equal(cases.length, 8);
+  for (const channel of ['chrome', 'msedge']) {
+    const proof = await runMapNegative({root, channel, mode: 'map-occluded', liveHead}); await pass(proof.name, proof.data);
+  }
+  assert.equal(cases.length, 10); record.status = 'passed';
 } catch (error) {
   record.status = 'failed'; record.error = {name: error.name, message: error.message, stack: error.stack}; throw error;
 } finally {
@@ -48,4 +52,4 @@ try {
   }};
   await walk(root); await fs.writeFile(path.join(root, 'sha256.json'), JSON.stringify(files, null, 2));
 }
-console.log(JSON.stringify({harnessHead, liveHead, liveCases: 8, freshBasicChecks: 32, expectedFailingBrowserChildren: 4, evidence: root}));
+console.log(JSON.stringify({harnessHead, liveHead, liveCases: 10, originalLiveCases: 8, addedOcclusionCases: 2, freshBasicChecks: 32, expectedFailingBrowserChildren: 6, evidence: root}));

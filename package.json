@@ -12,7 +12,8 @@
     "test:workflow": "node tests/ci/workflow-semantics.mjs",
     "test:browser-evidence": "node --test tests/browser-failure-evidence.test.mjs",
     "test:release": "node --test tests/release/command.test.mjs && node tests/release/run.mjs",
-    "test:live": "node tests/release/live-run.mjs"
+    "test:live": "node tests/release/live-run.mjs",
+    "test:trace-completion": "node --test tests/trace-completion.test.mjs"
   },
   "devDependencies": {
     "playwright": "1.58.2"

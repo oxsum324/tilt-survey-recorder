@@ -9,6 +9,7 @@ import {sha, assertRevisionChanged} from './site.mjs';
 import {monitorContext, assertOfflineRecovery} from '../desktop/diagnostics.mjs';
 import {withFailureEvidence, closeAfterEvidence} from '../browser-failure-evidence.mjs';
 import {assertSvgMapVisible, injectSvgMapFault} from './svg-map.mjs';
+import {syntheticImages} from './synthetic-images.mjs';
 
 const [out, channel, mode, liveHead] = process.argv.slice(2);
 await fs.mkdir(out, {recursive: true});
@@ -44,10 +45,7 @@ try {
     await seedPage.getByText('合成示例已載入，可直接預覽成果表。', {exact: true}).waitFor();
     await field('header.caseNumber').fill('舊V0.4.2線上升級－合成－' + channel);
     await seedPage.waitForFunction(() => document.documentElement.dataset.saveState === 'saved');
-    const images = await seedPage.evaluate(() => {
-      const make = (color, width, height) => {const c = document.createElement('canvas'); c.width = width; c.height = height; const x = c.getContext('2d'); x.fillStyle = color; x.fillRect(0, 0, width, height); x.fillStyle = '#000'; x.fillText('SYNTHETIC', 4, 18); return c.toDataURL('image/png').split(',')[1];};
-      return {photo: make('#c7e5dd', 240, 160), map: make('#eee5ca', 320, 200)};
-    });
+    const images = await seedPage.evaluate(syntheticImages);
     for (const [tab, input, name] of [['photos', 'photoImport', 'photo'], ['map', 'mapImport', 'map']]) {
       await seedPage.locator('[data-tab="' + tab + '"]').click();
       const buffer = Buffer.from(images[name], 'base64'); await fs.writeFile(path.join(out, 'source-' + name + '.png'), buffer);
