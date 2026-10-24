@@ -91,5 +91,29 @@ npm.cmd run test:browser-evidence
 這次只套用於曾發生首頁等待逾時的 review-followups 八情境，不宣稱其他八支腳本已有同等保存。
 trace 記錄瀏覽器操作與網路，不記錄 Node assert 的判定；原例外與命令日誌另外保存。
 本機回歸不代表雲端 CI、GitHub 上傳或第一次歷史逾時根因已驗證。
-runner 硬性終止、瀏覽器無回應或磁碟不可寫仍可能無法完整取證。
+runner 硬性終止或磁碟不可寫仍可能無法完整取證；頁面無回應的等待現已設獨立期限。
 依據：[Playwright tracing](https://playwright.dev/docs/api/class-tracing)。
+
+### 取證期限與首份收據隔離
+
+原五類回歸及全部舊斷言保留，另加首份 failure.json 寫入失敗、真實無回應 renderer、
+遲到回應不可發布、清理不回應、總預算耗盡五類，共十類。前七類各跑 Chrome／Edge（十四次），
+後三類是明列為 unit simulation 的期限／例外身分測試，不列真實瀏覽器附件。
+五種失敗模式共十個子程序均須 exit 1、未被 watchdog 強殺、且拋回同一個原始 Error 物件。
+
+固定預設每項取證最多 2000 ms、整體取證預算 12000 ms、清理最多 2000 ms。
+此預算只作用於診斷／清理，不變更原產品測試的 30000 ms 等待或 4000 ms 弱訊號門檻。
+DOM、HTML、PNG、trace 各自開始嘗試並平行取證；超時明列 captureErrors／artifactAttempts。
+超時後以有期限的 context 清理終止尚未完成的頁面操作；呼叫端的 context／browser 清理
+也有獨立期限，失敗只留診斷，不取代原測試錯誤。
+若沒有先前測試錯誤，清理失敗仍向外拋出並使測試失敗，不把清理失敗悄悄改成通過。
+
+failure.json／events.json／result.json 各自隔離寫入；首份 failure.json 失敗仍嘗試其餘附件，
+由 result.json 保存原錯誤與寫入失敗。先寫唯一 .pending 暫存檔，完成且未超時才發布正式檔名；
+遲到的 DOM／HTML／PNG 回應不再有發布續程。trace 使用唯一 .pending 路徑，只有期限內完成
+才發布 trace.zip；未完成暫存檔留作診斷、不列有效附件 SHA，外層封存待子程序退出後再雜湊全部檔案。
+預算用盡時不保證所有附件可完成；有收據不能當成附件全數完整。核心檔案系統無回應、OS 硬性終止
+仍不在 Node 計時器可保證的範圍。子程序另有 30000 ms watchdog；觸發強殺就是回歸失敗，不能列通過。
+總預算用盡而無法更新最終 metadata 時，保留最初 failed 收據，並把完整 failed fallback record
+寫到 stderr，隨命令日誌封存；不能把早期 running 的 result.json 當成成功。
+真實 renderer 回歸先取得原 locator TimeoutError，再使 renderer 忙迴圈無回應，測的是失敗取證分支。

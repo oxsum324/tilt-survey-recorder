@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import {startServer} from '../serve.mjs';
 import {poll} from './poll.mjs';
-import {withFailureEvidence} from './browser-failure-evidence.mjs';
+import {withFailureEvidence, closeAfterEvidence} from './browser-failure-evidence.mjs';
 
 const server=await startServer(),base=`http://127.0.0.1:${server.address().port}`,records=[];
 assert.doesNotMatch(await fs.readFile('style.css','utf8'),/html:has\(body\.readings-active\)/);
@@ -46,7 +46,7 @@ try{for(const channel of channels){
    await poll(page,async()=>assert.equal(await page.evaluate(()=>!document.documentElement.classList.contains('readings-active')&&!document.body.classList.contains('readings-active')&&document.documentElement.style.getPropertyValue('--live-results-height')===''&&getComputedStyle(document.documentElement).scrollPaddingTop==='auto'),true));
    assert.deepEqual(errors,[]);pass('離開讀數頁後舊觀測回呼不還原留白，無執行例外');
    });
-  }finally{await context.close();}
- }}finally{await browser.close();}
+  }finally{await closeAfterEvidence(context);}
+ }}finally{await closeAfterEvidence(browser);}
 }}finally{await new Promise(resolve=>server.close(resolve));await fs.mkdir('output/review-followups',{recursive:true});await fs.writeFile('output/review-followups/results.json',JSON.stringify(records,null,2));}
 assert.equal(records.length,channels.length*16);
