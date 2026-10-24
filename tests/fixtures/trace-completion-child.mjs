@@ -10,7 +10,7 @@ const nativeStop = context.tracing.stop.bind(context.tracing);
 let calls = 0, completedAction = false;
 context.tracing.stop = async options => {
   calls++;
-  if (mode === 'late-before-native') await new Promise(resolve => setTimeout(resolve, 2250));
+  if (mode === 'late-before-native' || mode === 'failure-export-delay') await new Promise(resolve => setTimeout(resolve, 2250));
   await nativeStop(options);
   if (mode === 'late-after-save') await new Promise(resolve => setTimeout(resolve, 2250));
 };
@@ -19,7 +19,9 @@ try {
   await withFailureEvidence({context, page, root, name: mode}, async () => {
     await page.setContent('<title>Trace completion fixture</title><h1>TRACE-SUCCESS-FIXTURE</h1><input data-field="header.caseNumber" value="SYNTHETIC">');
     await page.getByText('TRACE-SUCCESS-FIXTURE', {exact: true}).waitFor();
-    completedAction = true; return 42;
+    completedAction = true;
+    if (mode === 'failure-export-delay') throw new Error('INJECTED ORIGINAL ACTION FAILURE');
+    return 42;
   });
   throw new Error('Injected trace completion deadline must fail');
 } catch (error) {

@@ -12,6 +12,7 @@ export async function runMapNegative({root, channel, mode, liveHead}) {
   const read = async file => JSON.parse(await fs.readFile(file, 'utf8'));
   const result = await read(path.join(out, 'results.json'));
   assert.equal(result.status, 'failed'); assert.equal(result.checks.length, 3);
+  if (liveHead) assert.equal(result.cleanup.status, 'completed', 'An intended image failure cannot hide failed persistent-profile cleanup');
   const proof = await read(path.join(out, 'diagnostics/upgrade/failure.json'));
   assert.equal(proof.pageClosedAtFailure, false); assert.deepEqual(proof.captureErrors, []);
   assert.equal(proof.artifactAttempts.length, 4); assert.ok(proof.artifactAttempts.every(a => a.status === 'saved'));

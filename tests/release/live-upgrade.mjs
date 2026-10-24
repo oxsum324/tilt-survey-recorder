@@ -10,6 +10,9 @@ import {monitorContext, assertOfflineRecovery} from '../desktop/diagnostics.mjs'
 import {withFailureEvidence, closeAfterEvidence} from '../browser-failure-evidence.mjs';
 import {assertSvgMapVisible, injectSvgMapFault} from './svg-map.mjs';
 import {syntheticImages} from './synthetic-images.mjs';
+import {createTransportGate} from './transport-gate.mjs';
+import {observeWorkers} from './worker-lifecycle.mjs';
+import {cleanupProfile, applyCleanupResult} from './profile-cleanup.mjs';
 
 const [out, channel, mode, liveHead] = process.argv.slice(2);
 await fs.mkdir(out, {recursive: true});
@@ -31,10 +34,12 @@ const runtime = page => page.evaluate(async () => {
   for (const name of ['app.js', 'style.css']) result[name] = [...new Uint8Array(await crypto.subtle.digest('SHA-256', await (await fetch('./' + name)).arrayBuffer()))].map(x => x.toString(16).padStart(2, '0')).join('');
   return result;
 });
-let seed, context, before, sources;
+let seed, context, before, sources, gate;
 try {
   await save();
-  seed = await chromium.launchPersistentContext(profile, {channel, headless: true, viewport: {width: 1280, height: 900}});
+  gate = await createTransportGate();
+  record.transport = {kind: 'CONNECT tunnel; TLS remains end-to-end; no request routing during verification', offline: 'both browser emulation and transport blocked'};
+  seed = await chromium.launchPersistentContext(profile, {channel, headless: true, proxy: {server: gate.server}, viewport: {width: 1280, height: 900}});
   const seedPage = seed.pages()[0], seedDiagnostics = monitorContext(seed);
   const finishSeed = await routeOldFixture(seed, sites, out);
   await withFailureEvidence({context: seed, page: seedPage, root: path.join(out, 'diagnostics'), name: 'seed'}, async () => {
@@ -68,12 +73,14 @@ try {
     await fs.writeFile(path.join(out, 'seed-diagnostics.json'), JSON.stringify(seedDiagnostics, null, 2));
     await finishSeed();
   });
-  await seed.close(); seed = null;
+  await closeAfterEvidence(seed); seed = null;
   record.seedSessionClosed = true;
 
   // Reopen the same real browser profile with NO route handlers, initially offline.
-  context = await chromium.launchPersistentContext(profile, {channel, headless: true, offline: true, viewport: {width: 1280, height: 900}});
+  gate.setOnline(false, 'old-offline-before-browser-launch');
+  context = await chromium.launchPersistentContext(profile, {channel, headless: true, offline: true, proxy: {server: gate.server}, viewport: {width: 1280, height: 900}});
   const page = context.pages()[0]; let phase = 'offline'; const startup = monitorContext(context, () => phase);
+  await observeWorkers(context, page, out, () => phase);
   const field = key => page.locator('[data-field="' + key + '"]'), tab = name => page.locator('[data-tab="' + name + '"]').click();
   await withFailureEvidence({context, page, root: path.join(out, 'diagnostics'), name: 'upgrade'}, async () => {
     const startupUrl = sites.url + '?baseline-offline=' + channel;
@@ -87,7 +94,7 @@ try {
     pass('pinned-old-v042-survives-browser-restart', {oldRuntime, fingerprint: before.fingerprint});
 
     const diagnostics = monitorContext(context, () => phase); record.diagnostics = diagnostics;
-    phase = 'online'; await context.setOffline(false);
+    phase = 'online'; gate.setOnline(true, 'explicit-online-update'); await context.setOffline(false);
     const timeOrigin = await page.evaluate(() => performance.timeOrigin);
     await page.evaluate(async () => (await navigator.serviceWorker.getRegistration()).update());
     await page.locator('#updateButton').waitFor({state: 'visible'});
@@ -103,6 +110,7 @@ try {
     pass('new-complete-shell-active-old-cache-retired', {keys});
 
     phase = 'offline'; const url = sites.url + '?upgrade-offline=' + channel;
+    gate.setOnline(false, 'new-offline-before-navigation');
     await context.setOffline(true); await page.goto(url); await field('header.caseNumber').waitFor();
     const offline = await snapshot(page); assert.deepEqual(offline, before);
     await fs.writeFile(path.join(out, 'offline.json'), JSON.stringify(offline, null, 2));
@@ -112,7 +120,7 @@ try {
     await injectSvgMapFault(page, mode);
     record.svgMap = await assertSvgMapVisible(page, out, {mediaId: before.project.map.mediaId, sha256: sources[1].sha256, width: before.project.map.width, height: before.project.map.height});
     await page.screenshot({path: path.join(out, 'offline-map.png')});
-    phase = 'online'; await context.setOffline(false);
+    phase = 'online'; gate.setOnline(true, 'offline-verification-complete'); await context.setOffline(false);
     pass('offline-project-photo-and-painted-svg-map-retained', {fingerprint: offline.fingerprint});
     pass('strict-online-update-through-offline-diagnostics', assertOfflineRecovery(diagnostics, {url, workerUrl: sites.url + 'sw.js', readVerified: true}));
   });
@@ -120,10 +128,10 @@ try {
   record.browserVersion = context.browser() ? context.browser().version() : (await (await context.newCDPSession(page)).send('Browser.getVersion')).product;
 } catch (error) {record.status = 'failed'; record.error = {name: error.name, message: error.message, stack: error.stack}; console.error(error.stack); process.exitCode = 1;}
 finally {
-  if (seed) await closeAfterEvidence(seed);
-  if (context) {await context.setOffline(false).catch(() => {}); await closeAfterEvidence(context);}
-  // This uniquely named synthetic profile is outside user profiles and outside the artifact tree.
-  assert.ok(path.resolve(profile).startsWith(path.resolve(os.tmpdir()) + path.sep) && path.basename(profile).startsWith('tilt-map-live-'));
-  await fs.rm(profile, {recursive: true, force: true, maxRetries: 2}).catch(error => {record.profileCleanupError = error.message;});
+  if (gate) await fs.writeFile(path.join(out, 'transport-events.json'), JSON.stringify(gate.events, null, 2));
+  const cleanup = await cleanupProfile({profile, seed, context, gate, failed: record.status === 'failed'});
+  if (applyCleanupResult(record, cleanup)) {
+    console.error('Persistent profile cleanup failure: ' + record.profileCleanupError); process.exitCode = 1;
+  }
   record.endedUtc = new Date().toISOString(); await save();
 }

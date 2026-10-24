@@ -71,6 +71,14 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     attachedUtc: new Date().toISOString(), status: 'running', captureErrors: [], policy};
   let tracing = false;
   const tracePending = path.join(out, `pending-trace-${randomUUID()}.pending`);
+  const exportStarted = performance.now();
+  record.traceExport = {nativeInternals: 'opaque Playwright API; no inferred zip/download stage', stages: []};
+  const traceStage = (stage, extra = {}) => record.traceExport.stages.push({stage,
+    at: new Date().toISOString(), elapsedMs: performance.now() - exportStarted,
+    pageClosed: page.isClosed(), browserConnected: context.browser?.()?.isConnected?.() ?? null,
+    ...extra});
+  observe(context, 'close', () => {traceStage('context-closed'); return {};});
+  if (context.browser?.()) observe(context.browser(), 'disconnected', () => {traceStage('browser-disconnected'); return {};});
   let traceStop;
   const stopTrace = () => {
     // A deadline races the operation; it cannot cancel it. Reuse this exact promise
@@ -79,12 +87,17 @@ export async function withFailureEvidence({context, page, name, root = failureEv
       if (!tracing) throw new Error('Trace was not started');
       record.traceStop = {calls: 1, status: 'running', startedUtc: new Date().toISOString(),
         stagedFile: path.basename(tracePending)};
-      traceStop = Promise.resolve().then(() => context.tracing.stop({path: tracePending})).then(() => {
+      traceStage('stop-requested');
+      traceStop = Promise.resolve().then(() => {
+        traceStage('native-stop-entered');
+        return context.tracing.stop({path: tracePending});
+      }).then(() => {
         tracing = false; record.traceStop.status = 'completed';
         record.traceStop.finishedUtc = new Date().toISOString();
+        traceStage('native-stop-resolved');
       }, error => {
         record.traceStop.status = 'failed'; record.traceStop.error = errorRecord(error);
-        record.traceStop.finishedUtc = new Date().toISOString(); throw error;
+        record.traceStop.finishedUtc = new Date().toISOString(); traceStage('native-stop-rejected', {error: errorRecord(error)}); throw error;
       });
     }
     return traceStop;
@@ -118,6 +131,7 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     alreadyFailed.add(context);
     if (context.browser?.()) alreadyFailed.add(context.browser());
     record.status = 'failed'; record.failedUtc = new Date().toISOString();
+    traceStage('guard-failed', {error: errorRecord(error)});
     record.originalError = errorRecord(error);
     record.pageClosedAtFailure = page.isClosed(); record.urlAtFailure = page.url();
     const started = performance.now(), until = started + policy.totalMs;
@@ -171,8 +185,11 @@ export async function withFailureEvidence({context, page, name, root = failureEv
       attempt('page.html', () => page.content()),
       attempt('screenshot.png', () => page.screenshot({fullPage: true, timeout: policy.artifactMs})),
       attempt('trace.zip', async () => {
+        traceStage('failure-capture-wait');
         await stopTrace();
-        return fs.readFile(tracePending);
+        const bytes = await fs.readFile(tracePending);
+        traceStage('pending-read-completed', {bytes: bytes.length});
+        return bytes;
       }),
       ]);
       if (record.captureErrors.some(item => item.code === 'CAPTURE_TIMEOUT')) {
@@ -180,6 +197,14 @@ export async function withFailureEvidence({context, page, name, root = failureEv
       }
       record.finishedUtc = new Date().toISOString();
       record.captureElapsedMs = performance.now() - started;
+      // A file's presence is an observation, never proof that a ZIP finished exporting.
+      try {
+        const stat = await bounded('trace pending inspection', () => fs.stat(tracePending));
+        traceStage('capture-sealed', {pendingBytes: stat.size, pendingPresent: true});
+      } catch (failure) {
+        traceStage('capture-sealed', {pendingPresent: false, inspectionError: errorRecord(failure)});
+      }
+      await writeRecord('trace-export.json', record.traceExport, 'final');
       await writeRecord('failure.json', record, 'final');
       await writeRecord('events.json', events, 'final');
       await writeRecord('result.json', record, 'final');

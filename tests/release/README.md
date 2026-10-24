@@ -74,3 +74,27 @@ Chrome／Edge在staged與live各加局部遮蔽反例：只覆蓋第一色塊，
 
 子收據的`scope`及`execution`記實際本機／GitHub環境、run、attempt、job與工作流程SHA；
 合成／staged／live與靜態驗證範圍另列，避免將雲端執行誤標成本機。
+
+## 匯出診斷、離線傳輸邊界與設定檔清理
+
+trace另記停止請求、API進入／完成／拒絕、失敗取證等待、pending存在及大小，並記錄
+頁面關閉／瀏覽器連線狀態。`trace-export.json`在原取證期限內獨立保存；Playwright內部
+壓縮與下載階段仍不透明，不將pending存在誤稱為有效trace，不增加任何原期限。
+
+live持久設定檔使用本機CONNECT傳輸閘門：TLS仍由瀏覽器直接驗證真實Pages，連線時
+只轉送原始bytes；離線時先封鎖通道並關閉既有連線，再進行原瀏覽器離線驗證。
+驗證session仍無Playwright route handler，所有原HTTP／console／requestfailed及精確一筆
+離線失敗斷言保留。這避免瀏覽器自己的worker更新檢查繞過頁面離線模擬，不能稱作
+作業系統或手機實際斷網。`worker-lifecycle.jsonl`從首次goto前記CDP註冊／版本／錯誤、
+頁面controller與installing狀態、worker腳本SHA及phase；transport事件另存。
+
+`test:reliability`於本機與CI獨立跑12項，原14類與7項完整保留。兩個真實瀏覽器
+失敗路徑trace延遲子程序必須保留原錯誤、其他三附件及明列缺件，不能冒稱完整trace。
+Chrome／Edge另以合成localhost舊殼、明確CDP更新及受控install邊界，重現頁面離線時
+取得新worker、其27筆實際安裝fetch失敗，加上原導覽共28筆；必須由原嚴格斷言拒絕。
+這證明可產生該現象的機制，不證明歷史雲端的特定排程，未將觀測不足寫成確定根因。
+
+持久設定檔清理移除不必要的setOffline協定往返，傳輸、瀏覽器關閉及刪除共享原2000ms
+期限，前段失敗仍嘗試後段。只允許系統temp下獨立命名的合成設定檔；清理失敗必須
+原生exit1、保存stderr，已存在的產品錯誤不被取代。反例亦要求cleanup完成，EBUSY
+不能成為有效圖片反例。逾時後回傳的收據保持不變；清理失敗的殘留路徑明列而不冒稱已刪除。
