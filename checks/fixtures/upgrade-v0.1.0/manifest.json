@@ -1,0 +1,61 @@
+{
+  "purpose": "Frozen public legacy shell for real service-worker upgrade regression; never staged for Pages",
+  "ref": "b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc",
+  "files": [
+    {
+      "name": "index.html",
+      "sha256": "8edab580f9ded66663b18b00d77c7a877f63d08c4a1a2662b8b9459b3997e9a0",
+      "bytes": 2204
+    },
+    {
+      "name": "app.js",
+      "sha256": "59787736dbfe54ea74612ec500feb95fea285522343884ec151642176ce79990",
+      "bytes": 25916
+    },
+    {
+      "name": "model.js",
+      "sha256": "804d42deb31d3095013234b0a58fba1936559be237ce2d73884810f0fcd59bf9",
+      "bytes": 4139
+    },
+    {
+      "name": "calc.js",
+      "sha256": "1143e58171642a6eabf8710306b780d8fafb95cb0a4e9656474257a9e3d5b0ce",
+      "bytes": 7864
+    },
+    {
+      "name": "sketch.js",
+      "sha256": "8244f1a3c9965abb6cd85c294e23dea2fdd3c8b066fcd18fdbaea12dc86d6092",
+      "bytes": 8251
+    },
+    {
+      "name": "report.js",
+      "sha256": "f89c284fb0f592b76e478de5a3cb9dc7a29c4ba93e12a923dfb28d0a8892024b",
+      "bytes": 8072
+    },
+    {
+      "name": "store.js",
+      "sha256": "caaad8512dc5d8a272fb723346b8e0ab87acd8396dd89d0ffd2a3940db21300d",
+      "bytes": 8727
+    },
+    {
+      "name": "style.css",
+      "sha256": "0bad6adc7aff6896eb36daf837d89414e1ca7e10be8ea7c825c3ccbc1bfe2488",
+      "bytes": 12569
+    },
+    {
+      "name": "sw.js",
+      "sha256": "87a158f2b79a8ed4b6a6c77466b2862255ae067eed3adfbd0366100a033d4bb1",
+      "bytes": 1364
+    },
+    {
+      "name": "manifest.webmanifest",
+      "sha256": "ae545387ed8b15333121910974946975f12448abe8929f58abe5bb5b2872e3ab",
+      "bytes": 279
+    },
+    {
+      "name": "icon.svg",
+      "sha256": "95d2b0c7ae2d1dd0e164af9e92b679790ead258bd84ef2933f4f029c6c7ea008",
+      "bytes": 457
+    }
+  ]
+}

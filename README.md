@@ -61,7 +61,7 @@ npm.cmd start
 
 瀏覽器測試使用 Playwright；Windows 用已安裝 Google Chrome，其他環境使用 Chromium。若需要，先安裝 `npx playwright install chromium`。本機預覽 `http://127.0.0.1:8789/`。應透過伺服器或正式網址開啟，不能雙擊 index.html。
 
-測試只使用合成資料。截圖與實際 PDF 檢視紀錄在 `output/playwright/` 與 `output/media/`（不提交）。GitHub Actions 先跑單元測試，將明列的程式檔複製到 Pages；不直接發布整個工作目錄。`node tests/live.mjs` 比對線上部署清冊與全部程式檔雜湊。
+測試只使用合成資料。截圖與實際 PDF 檢視紀錄在 `output/playwright/` 與 `output/media/`（不提交）。GitHub Actions 先於 Windows 跑資料、既有瀏覽器與 Chrome／Edge 桌機矩陣，再於 main 通過後將明列的程式檔複製到 Pages；不直接發布整個工作目錄。桌機三項補測、Python 依賴、復跑方式與證據範圍見 [tests/desktop/README.md](tests/desktop/README.md)。`node tests/live.mjs` 比對線上部署清冊與全部程式檔雜湊。
 
 ## 參考來源
 

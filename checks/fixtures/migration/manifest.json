@@ -1,0 +1,67 @@
+{
+  "format": "tilt-survey-migration-fixture-manifest.v1",
+  "synthetic": true,
+  "fixtures": [
+    {
+      "file": "v0.1.0.json",
+      "sha256": "de0bd5e6d8ee7d278ea2ff59b268748a10f09a83543f6d3069e8bef72b2b35bf",
+      "version": "0.1.0",
+      "source": {
+        "ref": "b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc",
+        "modelSha256": "804d42deb31d3095013234b0a58fba1936559be237ce2d73884810f0fcd59bf9",
+        "calcSha256": "1143e58171642a6eabf8710306b780d8fafb95cb0a4e9656474257a9e3d5b0ce"
+      },
+      "cases": 16,
+      "pairs": 21
+    },
+    {
+      "file": "v0.3.0.json",
+      "sha256": "3dd88ab165fe26080deeb324e8afb16272b91d3171abb3564c248a9f6c635a44",
+      "version": "0.3.0",
+      "source": {
+        "ref": "3f83c6deba226c7473974055ebcf6f7de0363b76",
+        "modelSha256": "087f23e2376aed3b3d6e9ae6467a8781323c9653f060b8cbc03708fc80230da7",
+        "calcSha256": "1143e58171642a6eabf8710306b780d8fafb95cb0a4e9656474257a9e3d5b0ce"
+      },
+      "cases": 16,
+      "pairs": 21
+    },
+    {
+      "file": "v0.4.0.json",
+      "sha256": "e404797da1fcc5868dc09b790497064edf4386a506771aa47b2dff5621382709",
+      "version": "0.4.0",
+      "source": {
+        "ref": "b36e2b4405af2aa3db9ebdb030ac98468f467cc4",
+        "modelSha256": "cb6b07a3cb1ec8ffb50c771ca8e445d53d1a8e55ca19231e4c572fea676be693",
+        "calcSha256": "22066634d29cc125b69daddd9e399b13c45dd7f5a08c50697f42cc89cef2ba11"
+      },
+      "cases": 1,
+      "pairs": 2
+    },
+    {
+      "file": "v0.4.1.json",
+      "sha256": "78a04ee462395eecab45bff9672d86a77bb27e0ed0dad183912ddacace842f7b",
+      "version": "0.4.1",
+      "source": {
+        "ref": "bc271925c74944d00fa97cfd38922312403b408b",
+        "modelSha256": "9f40b19fe467f3fdc06ea77f94074d4875ce33620c0b9576d5b5edb01de5228b",
+        "calcSha256": "22066634d29cc125b69daddd9e399b13c45dd7f5a08c50697f42cc89cef2ba11"
+      },
+      "cases": 1,
+      "pairs": 2
+    },
+    {
+      "file": "v0.2.0.json",
+      "sha256": "ca821947ab0a452513052faba742033943f5a3b85156aacb37e4a3101a88a3a0",
+      "version": "0.2.0",
+      "source": {
+        "ref": "b6b3eeec40daeacd2d344ba442d45c19b1e1b7dc",
+        "modelSha256": "804d42deb31d3095013234b0a58fba1936559be237ce2d73884810f0fcd59bf9",
+        "calcSha256": "1143e58171642a6eabf8710306b780d8fafb95cb0a4e9656474257a9e3d5b0ce",
+        "note": "Synthetic V0.2 structure based on V0.1 model; not a claimed historical V0.2 export"
+      },
+      "cases": 1,
+      "pairs": 2
+    }
+  ]
+}

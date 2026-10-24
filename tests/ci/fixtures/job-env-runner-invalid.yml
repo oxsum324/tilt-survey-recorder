@@ -1,0 +1,9 @@
+name: Rejected job context regression
+on: push
+jobs:
+  check:
+    runs-on: windows-latest
+    env:
+      TILT_CI_EVIDENCE_ROOT: ${{ runner.temp }}/tilt-ci-${{ github.run_id }}
+    steps:
+      - run: Write-Output 'This workflow must be rejected before execution'

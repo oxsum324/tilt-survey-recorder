@@ -4,11 +4,13 @@ import fs from 'node:fs/promises';
 import {startServer} from '../serve.mjs';
 import {poll,reportReady} from './poll.mjs';
 import {revealControl,fieldControl} from './controls.mjs';
+import {withFailureEvidence,closeAfterEvidence} from './browser-failure-evidence.mjs';
+import {installDisclosureProbe,disclosureCheckpoint,waitForDisclosureSaved,adoptSyntheticProject} from './disclosure-state.mjs';
 const server=await startServer(),browser=await chromium.launch({channel:process.platform==='win32'?'chrome':undefined,headless:true});
 const context=await browser.newContext({viewport:{width:375,height:812},acceptDownloads:true}),page=await context.newPage();
 const metrics={dataCardSelector:'#workspace > section.card',mobile:[],sunlight:[]},tabs=['case','facades','readings','photos','map','reports'];
 const field=path=>fieldControl(page,path),tab=async name=>{await page.locator(`[data-tab="${name}"]`).click();if(name==='reports')await reportReady(page);await page.evaluate(()=>scrollTo(0,0));};
-const seed=async(old=false)=>{await page.evaluate(async old=>{const {sampleProject}=await import('./model.js'),{replaceProject}=await import('./store.js'),p=sampleProject();if(old){p.updatedAt='2000-01-01T00:00:00.000Z';p.lastExportedAt=p.updatedAt;}await replaceProject(p);},old);await page.reload();await page.locator('[data-field="header.caseNumber"]').waitFor();};
+const seed=async(old=false)=>{const p=await page.evaluate(async old=>{const {sampleProject}=await import('./model.js'),p=sampleProject();if(old){p.updatedAt='2000-01-01T00:00:00.000Z';p.lastExportedAt=p.updatedAt;}return p;},old);await adoptSyntheticProject(page,p);await page.reload();await page.locator('[data-field="header.caseNumber"]').waitFor();};
 const sunlight=async()=>{await page.locator('#statusToggle').click();await page.locator('#sunlightButton').click();await page.locator('#statusToggle').click();};
 const dataCard=()=>page.locator(metrics.dataCardSelector).first();
 const pairOffset=()=>page.evaluate(()=>document.querySelector('[data-field="pairs.0.inPlane.A.rounds.0.dxCm"]').getBoundingClientRect().top-document.querySelector('[data-pair-card]').getBoundingClientRect().top);
@@ -16,6 +18,8 @@ const snapshot=()=>page.evaluate(async()=>{const {loadProject}=await import('./s
 const desktopGeometry=()=>page.locator('.sidebar').evaluate(e=>{const r=e.getBoundingClientRect(),end=Math.max(...[...e.children].filter(c=>getComputedStyle(c).display!=='none').map(c=>c.getBoundingClientRect().bottom));return {width:r.width,blankRatio:Math.max(0,r.bottom-end)/r.height};});
 await context.addInitScript(()=>{window.shareOutcome='cancel';Object.defineProperty(navigator,'canShare',{value:()=>true});Object.defineProperty(navigator,'share',{value:async()=>{if(window.shareOutcome==='cancel')throw new DOMException('cancel','AbortError');}});});
 try{
+ await withFailureEvidence({context,page,name:'mobile-layout'},async()=>{
+ await installDisclosureProbe(page);
  await fs.mkdir('output/mobile-layout',{recursive:true});
  await page.goto(`http://127.0.0.1:${server.address().port}`);await page.locator('[data-field="header.caseNumber"]').waitFor();await seed();
  for(const name of tabs){
@@ -93,14 +97,20 @@ try{
  await tab('case');await poll(page,async()=>assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollPaddingTop),'auto'));await page.setViewportSize({width:375,height:812});await tab('readings');await poll(page,async()=>assert.equal(await page.evaluate(()=>getComputedStyle(document.documentElement).scrollPaddingTop),'auto'));
  console.log('PASS 1280 px Tab 焦點由實際遮擋位置捲到結果列下方，留白隨實際高度，非讀數頁與手機不套用');
  await page.setViewportSize({width:375,height:812});
- await page.evaluate(async()=>{localStorage.removeItem('tilt-survey-disclosures');const {sampleProject,createPair,confirmObservation}=await import('./model.js'),{replaceProject}=await import('./store.js'),p=sampleProject(),q=createPair(3,p.facades[0].id);q.inPlane.A.hCm=q.outPlane.A.hCm='441.0';q.inPlane.A.rounds[0].dxCm=q.outPlane.A.rounds[0].dxCm='2.0';p.pairs.push(q);confirmObservation(p,q,p.facades[0]);await replaceProject(p);});
+ const disclosureProject=await page.evaluate(async()=>{localStorage.removeItem('tilt-survey-disclosures');const {sampleProject,createPair,confirmObservation}=await import('./model.js'),p=sampleProject(),q=createPair(3,p.facades[0].id);q.inPlane.A.hCm=q.outPlane.A.hCm='441.0';q.inPlane.A.rounds[0].dxCm=q.outPlane.A.rounds[0].dxCm='2.0';p.pairs.push(q);confirmObservation(p,q,p.facades[0]);return p;});
+ await adoptSyntheticProject(page,disclosureProject);
  await page.reload();await tab('readings');const before=await snapshot();
  await poll(page,async()=>assert.ok(await pairOffset()<=420,`group to first number ${await pairOffset()}`));metrics.pairToFirstNumber=await pairOffset();
  for(const [index,axis,expected]of [[0,'inPlane',212],[0,'outPlane',168],[1,'inPlane',188],[1,'outPlane',179],[2,'inPlane',221]])await poll(page,async()=>assert.equal((await snapshot()).results[index][axis].denominator,expected));
  const direction=page.locator('[data-reading-axis="inPlane"] .form-disclosure');await poll(page,async()=>assert.equal(await direction.getAttribute('open'),null));await direction.locator('summary').click();
  await poll(page,async()=>assert.equal(await page.evaluate(key=>JSON.parse(localStorage.getItem('tilt-survey-disclosures'))[key],`direction:${before.project.pairs[0].id}:inPlane`),true));
  await poll(page,async()=>assert.notEqual(await page.locator('[data-pair-card] .form-disclosure').getAttribute('open'),null));await poll(page,async()=>assert.match(await page.locator('[data-pair-card] summary').innerText(),/TB 395 cm/));
- await page.reload();await tab('readings');await poll(page,async()=>assert.notEqual(await direction.getAttribute('open'),null));await poll(page,async()=>assert.deepEqual(await snapshot(),before));await direction.locator('summary').click();await page.reload();await tab('readings');await poll(page,async()=>assert.equal(await direction.getAttribute('open'),null));await poll(page,async()=>assert.deepEqual(await snapshot(),before));
+ await page.reload();await tab('readings');await poll(page,async()=>assert.notEqual(await direction.getAttribute('open'),null));await poll(page,async()=>assert.deepEqual(await snapshot(),before));
+ await disclosureCheckpoint(page,'before-collapse-click');await direction.locator('summary').click();
+ await disclosureCheckpoint(page,'after-collapse-click');await waitForDisclosureSaved(page,direction,false);
+ await disclosureCheckpoint(page,'before-collapse-reload');await page.reload();await tab('readings');
+ await disclosureCheckpoint(page,'after-collapse-reload');
+ await poll(page,async()=>assert.equal(await direction.getAttribute('open'),null));await poll(page,async()=>assert.deepEqual(await snapshot(),before));
  console.log('PASS 375 px 首數字欄位不超過 420 px，摺疊偏好重開保留且規格 #1～#4 與模型完全不變');
  const first=page.locator('[data-field="pairs.0.inPlane.A.rounds.0.dxCm"]'),last=page.locator('[data-field="pairs.0.outPlane.A.rounds.0.dxCm"]');
  await poll(page,async()=>assert.equal(await first.getAttribute('enterkeyhint'),'next'));await first.press('Enter');await poll(page,async()=>assert.equal(await last.evaluate(e=>document.activeElement===e),true));await poll(page,async()=>assert.equal(await last.getAttribute('enterkeyhint'),'done'));await last.press('Enter');await poll(page,async()=>assert.equal(await last.evaluate(e=>document.activeElement===e),false));
@@ -168,4 +178,5 @@ try{
  await page.setViewportSize({width:1280,height:900});await poll(page,async()=>assert.equal(await page.locator('.page-selector').count(),0));await poll(page,async()=>assert.equal(await page.locator('.pair-list').isVisible(),true));await poll(page,async()=>assert.equal(await page.locator('.pair-list').evaluate(e=>e.parentElement.id),'workspace'));
  console.log('PASS 四頁標題選單保留切換操作，桌機還原原選擇列表，量測不納入選擇卡');
  await fs.writeFile('output/mobile-layout/results.json',JSON.stringify(metrics,null,2));
-}finally{await context.close();await browser.close();await new Promise(r=>server.close(r));}
+ });
+}finally{await closeAfterEvidence(context);await closeAfterEvidence(browser);server.closeAllConnections();await new Promise(r=>server.close(r));}
