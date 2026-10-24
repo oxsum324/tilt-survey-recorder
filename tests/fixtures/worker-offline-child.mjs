@@ -38,7 +38,7 @@ try {
     if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, {once: true}));
   });
   assert.equal(await page.evaluate(async () => (await (await caches.open('tilt-survey-probe-old')).keys()).length), 27);
-  await closeAfterEvidence(context);
+  await closeAfterEvidence(context.browser() || context);
   revision = 'new'; phase = 'offline';
   context = await chromium.launchPersistentContext(profile, {channel, headless: true, offline: true}); page = context.pages()[0];
   const lifecycle = await observeWorkers(context, page, out, () => phase);
@@ -97,7 +97,7 @@ try {
   });
 } catch (error) {originalError = error; throw error;}
 finally {
-  const cleanup = await cleanupProfile({profile, context, failed: Boolean(originalError)});
+  const cleanup = await cleanupProfile({profile, context, closeOwnedBrowser: true, failed: Boolean(originalError)});
   await fs.writeFile(path.join(out, 'cleanup.json'), JSON.stringify(cleanup, null, 2));
   server.closeAllConnections(); await new Promise(resolve => server.close(resolve));
   if (cleanup.status !== 'completed') {

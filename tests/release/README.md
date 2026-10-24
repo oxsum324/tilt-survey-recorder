@@ -88,7 +88,7 @@ live持久設定檔使用本機CONNECT傳輸閘門：TLS仍由瀏覽器直接驗
 作業系統或手機實際斷網。`worker-lifecycle.jsonl`從首次goto前記CDP註冊／版本／錯誤、
 頁面controller與installing狀態、worker腳本SHA及phase；transport事件另存。
 
-`test:reliability`於本機與CI獨立跑12項，原14類與7項完整保留。兩個真實瀏覽器
+`test:reliability`於本機與CI獨立跑13項，原14類與7項完整保留。兩個真實瀏覽器
 失敗路徑trace延遲子程序必須保留原錯誤、其他三附件及明列缺件，不能冒稱完整trace。
 Chrome／Edge另以合成localhost舊殼、明確CDP更新及受控install邊界，重現頁面離線時
 取得新worker、其27筆實際安裝fetch失敗，加上原導覽共28筆；必須由原嚴格斷言拒絕。
@@ -98,3 +98,8 @@ Chrome／Edge另以合成localhost舊殼、明確CDP更新及受控install邊界
 期限，前段失敗仍嘗試後段。只允許系統temp下獨立命名的合成設定檔；清理失敗必須
 原生exit1、保存stderr，已存在的產品錯誤不被取代。反例亦要求cleanup完成，EBUSY
 不能成為有效圖片反例。逾時後回傳的收據保持不變；清理失敗的殘留路徑明列而不冒稱已刪除。
+
+兩次首次雲端已實際拒絕context-close逾時，四附件與原遮蔽錯誤完整；後續針對本測試
+獨立啟動的持久瀏覽器明確選用Browser.close，避開Context.close的先行協定處理。
+一般context不自動關閉所屬browser。此路徑共用原2000ms預算，新增第13項回歸；
+真實Chrome／Edge的關閉與設定檔刪除仍須逐次通過，不能靠這項模擬代替。

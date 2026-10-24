@@ -73,7 +73,7 @@ try {
     await fs.writeFile(path.join(out, 'seed-diagnostics.json'), JSON.stringify(seedDiagnostics, null, 2));
     await finishSeed();
   });
-  await closeAfterEvidence(seed); seed = null;
+  await closeAfterEvidence(seed.browser() || seed); seed = null;
   record.seedSessionClosed = true;
 
   // Reopen the same real browser profile with NO route handlers, initially offline.
@@ -129,7 +129,7 @@ try {
 } catch (error) {record.status = 'failed'; record.error = {name: error.name, message: error.message, stack: error.stack}; console.error(error.stack); process.exitCode = 1;}
 finally {
   if (gate) await fs.writeFile(path.join(out, 'transport-events.json'), JSON.stringify(gate.events, null, 2));
-  const cleanup = await cleanupProfile({profile, seed, context, gate, failed: record.status === 'failed'});
+  const cleanup = await cleanupProfile({profile, seed, context, gate, closeOwnedBrowser: true, failed: record.status === 'failed'});
   if (applyCleanupResult(record, cleanup)) {
     console.error('Persistent profile cleanup failure: ' + record.profileCleanupError); process.exitCode = 1;
   }

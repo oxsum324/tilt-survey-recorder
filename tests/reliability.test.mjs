@@ -32,6 +32,16 @@ test('unresponsive context is bounded by the original 2000ms and removal is stil
   assert.equal(result.stages[0].status, 'timed-out'); assert.ok(result.elapsedMs < 3000); await passed('profile-unresponsive', result);
 });
 
+test('explicitly owned persistent browser closes directly without waiting for context protocol disposal', async () => {
+  const calls = [];
+  const browser = {close: async () => {calls.push('browser');}};
+  const context = {browser: () => browser, close: () => {calls.push('context'); return new Promise(() => {});}};
+  const result = await cleanupProfile({profile: profile(), context, closeOwnedBrowser: true, remove: async () => calls.push('remove')});
+  assert.deepEqual(calls, ['browser', 'remove']); assert.equal(result.status, 'completed'); assert.equal(result.timeoutMs, 2000);
+  assert.deepEqual(result.stages.map(s => s.name), ['browser-close', 'profile-remove']);
+  await passed('owned-browser-direct-close', result);
+});
+
 test('EBUSY is a failed cleanup, never a successful status', async () => {
   const result = await cleanupProfile({profile: profile(), remove: async () => {throw Object.assign(new Error('injected lockfile'), {code: 'EBUSY'});}});
   assert.equal(result.status, 'failed'); assert.equal(result.stages[0].error.code, 'EBUSY'); await passed('profile-locked', result);

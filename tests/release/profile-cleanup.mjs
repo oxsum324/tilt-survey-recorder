@@ -17,7 +17,8 @@ export function applyCleanupResult(record, cleanup) {
 // The whole teardown shares the original cleanup deadline. An earlier failure does
 // not skip later attempts, and no late operation can change the returned receipt.
 export async function cleanupProfile({profile, context, seed, gate, failed = false,
-  timeoutMs = capturePolicy.cleanupMs, remove = p => fs.rm(p, {recursive: true, force: true, maxRetries: 2})}) {
+  closeOwnedBrowser = false, timeoutMs = capturePolicy.cleanupMs,
+  remove = p => fs.rm(p, {recursive: true, force: true, maxRetries: 2})}) {
   const absolute = path.resolve(profile), temp = path.resolve(os.tmpdir()) + path.sep;
   assert.ok(absolute.startsWith(temp) && path.basename(absolute).startsWith('tilt-map-live-'), 'Only isolated synthetic profiles may be removed');
   const start = performance.now(), until = start + timeoutMs, stages = [];
@@ -35,10 +36,17 @@ export async function cleanupProfile({profile, context, seed, gate, failed = fal
     finally {clearTimeout(timer); entry.finishedUtc = new Date().toISOString();}
   };
   if (gate) await attempt('transport-close', () => gate.close());
-  if (seed) await attempt('seed-close', () => seed.close());
+  const close = async (resource, seedResource = false) => {
+    const browser = closeOwnedBrowser ? resource.browser?.() : null;
+    // Only callers that launched their own isolated persistent browser opt in.
+    // Browser.close avoids context-close protocol disposal before browser shutdown.
+    await attempt(seedResource ? (browser ? 'seed-browser-close' : 'seed-close') :
+      (browser ? 'browser-close' : 'context-close'), () => (browser || resource).close());
+  };
+  if (seed) await close(seed, true);
   // Closing needs no network restoration; avoiding setOffline removes an unbounded
   // protocol roundtrip after a failed browser. All raw network records remain intact.
-  if (context) await attempt('context-close', () => context.close());
+  if (context) await close(context);
   await attempt('profile-remove', () => remove(absolute));
   const result = {status: stages.every(s => s.status === 'completed') ? 'completed' : 'failed',
     timeoutMs, elapsedMs: performance.now() - start, profile: absolute, originalFailure: failed, stages};
