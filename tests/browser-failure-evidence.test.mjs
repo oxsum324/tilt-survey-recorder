@@ -123,6 +123,10 @@ test('failure.json write failure cannot skip other attachments or replace the or
     assert.ok((await fs.stat(path.join(out, 'failure.json'))).isDirectory());
     assert.equal(record.artifactAttempts.length, 4);
     assert.ok(record.artifactAttempts.every(item => item.status === 'saved'));
+    const pending = (await fs.readdir(out)).filter(file => file.endsWith('.pending'));
+    assert.ok(pending.length > 0);
+    assert.ok(pending.every(file => !file.startsWith('.')), 'Staging evidence must not be excluded as a hidden upload file');
+    assert.ok((await read(path.join(out, 'sha256.json'))).every(item => !item.file.endsWith('.pending')));
     for (const name of ['page-state.json', 'page.html', 'screenshot.png', 'trace.zip', 'events.json']) {
       assert.ok((await fs.stat(path.join(out, name))).size > 0, name);
     }

@@ -72,7 +72,7 @@ export async function withFailureEvidence({context, page, name, root = failureEv
   const manifest = async () => {
     const files = [];
     for (const entry of await fs.readdir(out, {withFileTypes: true})) {
-      if (!entry.isFile() || entry.name === 'sha256.json' || entry.name.startsWith('.')) continue;
+      if (!entry.isFile() || entry.name === 'sha256.json' || entry.name.startsWith('.') || entry.name.endsWith('.pending')) continue;
       const bytes = await fs.readFile(path.join(out, entry.name));
       files.push({file: entry.name, bytes: bytes.length,
         sha256: createHash('sha256').update(bytes).digest('hex')});
@@ -106,7 +106,7 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     // Only a completed, on-time capture can be published under a final artifact name.
     // Expired operations have no continuation that can write a late page-state/HTML/PNG.
     const publish = async (artifact, bytes) => {
-      const pending = path.join(out, `.${artifact}.${randomUUID()}.pending`);
+      const pending = path.join(out, `pending-${artifact}-${randomUUID()}.pending`);
       const controller = new AbortController(); let active = true;
       try {
         await bounded(`${artifact} write`, async () => {
@@ -135,7 +135,7 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     try {
       await writeRecord('failure.json', record, 'initial');
       await writeRecord('events.json', events, 'initial');
-      const tracePending = path.join(out, `.trace.${randomUUID()}.pending`);
+      const tracePending = path.join(out, `pending-trace-${randomUUID()}.pending`);
       await Promise.all([
       attempt('page-state.json', () => page.evaluate(() => ({url: location.href, title: document.title,
           readyState: document.readyState, caseNumber: [...document.querySelectorAll('[data-field="header.caseNumber"]')].map(e => ({

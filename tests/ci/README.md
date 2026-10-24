@@ -117,3 +117,5 @@ failure.json／events.json／result.json 各自隔離寫入；首份 failure.jso
 總預算用盡而無法更新最終 metadata 時，保留最初 failed 收據，並把完整 failed fallback record
 寫到 stderr，隨命令日誌封存；不能把早期 running 的 result.json 當成成功。
 真實 renderer 回歸先取得原 locator TimeoutError，再使 renderer 忙迴圈無回應，測的是失敗取證分支。
+暫存檔使用不以句點開頭的 pending-...pending 名稱，避免 upload-artifact v4 預設排除隱藏檔；
+回歸核對暫存檔確實存在、不是隱藏檔名，且不混入有效附件 SHA 清冊。雲端實際上傳仍待執行。
