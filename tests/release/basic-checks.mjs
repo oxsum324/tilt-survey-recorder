@@ -1,7 +1,7 @@
 import strictAssert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-export async function basicChecks({page,out,channel,head,appHash,site,result={}}) {
+export async function basicChecks({page,out,channel,head,appHash,site,version,result={}}) {
   const checks = [], diagnostics = {responses:[],httpErrors:[],consoleErrors:[],pageErrors:[],requestFailures:[]};
   let phase = 'online';
   const assert = (value,message) => {if(!value)throw new Error(message);};
@@ -23,9 +23,9 @@ export async function basicChecks({page,out,channel,head,appHash,site,result={}}
     await page.reload();await field('header.caseNumber').waitFor();
     await check('線上 manifest 與實際瀏覽器 app.js 對應 main',async()=>{
       const response=await page.request.get(site+'deploy-manifest.json?release-check='+head);assert(response.status()===200,'manifest HTTP');
-      const manifest=await response.json();assert(manifest.commit===head&&manifest.version==='0.4.2','manifest identity');
+      const manifest=await response.json();assert(manifest.commit===head&&manifest.version===version,'manifest identity');
       const actual=await page.evaluate(async()=>{const r=await fetch('./app.js');const data=await r.arrayBuffer();return [...new Uint8Array(await crypto.subtle.digest('SHA-256',data))].map(x=>x.toString(16).padStart(2,'0')).join('');});
-      assert(actual===appHash,'browser app bytes must match main');assert((await page.title()).includes('V0.4.2'),'title');return {commit:manifest.commit,appSha256:actual};
+      assert(actual===appHash,'browser app bytes must match main');assert((await page.title()).includes('V'+version),'title');return {commit:manifest.commit,appSha256:actual};
     });
     await check('合成示例四個分母',async()=>{
       const values=await page.evaluate(async()=>{const {loadProject}=await import('./store.js'),{calculatePair}=await import('./calc.js'),p=await loadProject();return p.pairs.flatMap(q=>{const c=calculatePair(q,p.facades.find(f=>f.id===q.facadeId),p.settings);return[c.inPlane.denominator,c.outPlane.denominator];});});
@@ -64,7 +64,7 @@ export async function basicChecks({page,out,channel,head,appHash,site,result={}}
       const pending=page.waitForEvent('download');await page.locator('[data-action="export"]').first().click();const download=await pending;await download.saveAs(out+'/synthetic-case.tiltsurvey');let raw='';const stream=await download.createReadStream();for await(const b of stream)raw+=b.toString('utf8');const data=JSON.parse(raw);assert(data.format==='tilt-survey-case.v1'&&data.project.header.caseNumber===caseNumber&&data.project.pairs.length===2,'backup content');return {filename:download.suggestedFilename(),format:data.format,pairs:2,importExecuted:false};
     });
     await check('離線資源就緒',async()=>{await page.waitForFunction(()=>document.querySelector('#offlineStatus').textContent.includes('離線資源已準備'));await page.evaluate(async()=>{await navigator.serviceWorker.ready;if(!navigator.serviceWorker.controller)await new Promise(r=>navigator.serviceWorker.addEventListener('controllerchange',r,{once:true}));});return await page.evaluate(async()=>({caches:await caches.keys(),controller:navigator.serviceWorker.controller.scriptURL}));});
-    const offlineUrl=site+'?release=0.4.2&pr5='+head+'&live-offline='+channel;
+    const offlineUrl=site+'?release='+version+'&pr5='+head+'&live-offline='+channel;
     await check('離線重開仍保留資料與成果',async()=>{
       phase='offline';await page.context().setOffline(true);await page.goto(offlineUrl);await field('header.caseNumber').waitFor();assert(await field('header.caseNumber').inputValue()===caseNumber,'offline case');await tab('readings');assert(await field('pairs.0.inPlane.A.rounds.0.dxCm').inputValue()==='2.3','offline dx');await tab('reports');assert(await page.locator('.result-sheet').count()===1,'offline report');await page.screenshot({path:out+'/offline.png'});
     });

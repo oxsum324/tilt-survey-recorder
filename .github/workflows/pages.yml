@@ -101,10 +101,14 @@ jobs:
         id: close_lifecycle
         if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name close_lifecycle -Executable npm.cmd -Arguments @('run', 'test:close-lifecycle'); exit $LASTEXITCODE
-      - name: Data tests (92)
+      - name: Data tests including case-integrity regressions
         id: data
         if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name data -Executable npm.cmd -Arguments @('test'); exit $LASTEXITCODE
+      - name: Reject stale case writes with real Chrome IndexedDB
+        id: storage_sessions
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name storage_sessions -Executable npm.cmd -Arguments @('run', 'test:storage'); exit $LASTEXITCODE
       - name: Existing browser tests (101)
         id: browser
         if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}

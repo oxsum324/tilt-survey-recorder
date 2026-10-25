@@ -14,7 +14,9 @@ export async function loadSites(){
 }
 export function cacheRevision(current){
  const entries=[...current].filter(([name])=>!['sw.js','deploy-manifest.json'].includes(name)).sort(([a],[b])=>a<b?-1:a>b?1:0);
- return 'tilt-survey-v0.4.2-'+sha(Buffer.from(entries.map(([name,bytes])=>name+'\0'+sha(bytes)+'\n').join(''))).slice(0,16);
+ const version=current.get('model.js').toString().match(/VERSION=['"]([0-9.]+)['"]/);
+ assert.ok(version,'Runtime model version is required');
+ return 'tilt-survey-v'+version[1]+'-'+sha(Buffer.from(entries.map(([name,bytes])=>name+'\0'+sha(bytes)+'\n').join(''))).slice(0,16);
 }
 export function assertRevisionChanged(old,current){
  const changed=[...old].some(([name,bytes])=>name!=='sw.js'&&sha(bytes)!==sha(current.get(name)));

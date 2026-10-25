@@ -10,7 +10,7 @@ export async function loadLiveSites(expectedHead) {
   const response = await fetch(liveUrl + 'deploy-manifest.json?svg-evidence=' + Date.now());
   assert.equal(response.status, 200);
   const manifest = await response.json();
-  assert.equal(manifest.commit, expectedHead); assert.equal(manifest.version, '0.4.2');
+  assert.equal(manifest.commit, expectedHead); assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
   assert.equal(manifest.files.length, 27);
   const current = new Map();
   for (const file of manifest.files) {
@@ -20,6 +20,8 @@ export async function loadLiveSites(expectedHead) {
     assert.equal(bytes.length, file.bytes); assert.equal(sha(bytes), file.sha256);
     current.set(file.path, bytes);
   }
+  const runtimeVersion=current.get('model.js').toString().match(/VERSION=['"]([0-9.]+)['"]/);
+  assert.ok(runtimeVersion,'Published model must declare a version');assert.equal(manifest.version,runtimeVersion[1]);
   return {...sites, current, manifest, url: liveUrl};
 }
 

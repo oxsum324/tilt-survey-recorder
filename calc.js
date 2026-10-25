@@ -22,8 +22,9 @@ export function compass(direction, facingDeg) {
   const f=number(decimalMm(facingDeg,'mm'));
   if(f<0||f>=360) throw Error('立面朝向須為 0 至小於 360 度');
   const angle=(f+({front:0,back:180,right:-90,left:90}[direction])+360)%360;
-  return ['北','東北','東','東南','南','西南','西','西北'][Math.floor((angle+22.5)/45)%8];
+  return cardinalDirection(angle);
 }
+const cardinalDirection=angle=>['北','東北','東','東南','南','西南','西','西北'][Math.floor((((angle%360)+360)%360+22.5)/45)%8];
 export const directionText = direction => ({left:'向左傾',right:'向右傾',front:'向前傾',back:'向後傾'}[direction]||'');
 function checks(settings) {
   const s={...DEFAULT_SETTINGS,...settings};
@@ -45,7 +46,7 @@ function finish(ds,hs,axis,settings,facade,details) {
   if(hMm<Number(settings.minHeightCm)*10) warnings.push('量測垂距較短，讀數誤差對傾斜率影響較大');
   if(dxMm<Number(settings.minOffsetMm)) warnings.push('偏移量小於設定之量測誤差值，傾斜率僅供參考');
   if(dxMm===0&&signedMm!==0) warnings.push('表列偏移量捨入為 0.0 cm；原始值仍保留於原始讀數表');
-  const bearing=settings.showCompass&&direction&&facade.facingDeg!==''?`（向${compass(direction,facade.facingDeg)}）`:'';
+  const bearing=settings.showCompass&&direction&&(details.mode==='C'||facade.facingDeg!=='')?`（向${details.mode==='C'?baselineCompass(direction,facade.baseline):compass(direction,facade.facingDeg)}）`:'';
   return {status:'ok',dxMm,hMm,signedMm,dxCm:(dxMm/10).toFixed(1),hCm:(hMm/10).toFixed(1),denominator,direction,
     directionText:dxMm===0?'':directionText(direction)+bearing,ratioText:dxMm===0?'未量得偏移（ΔX＝0.0 cm）':`1／${denominator}`,differenceMm,warnings,
     rounds:ds.map((d,i)=>({signedMm:number(d),hMm:number(hs[i])})),...details};
@@ -63,6 +64,10 @@ export function baselineVectors(baseline) {
   const length=Math.hypot(e,n);
   if(!length) throw Error('立面基準無效：A 與 B 重合');
   const u=[e/length,n/length]; return {u,v:[-u[1],u[0]]};
+}
+export function baselineCompass(direction,baseline) {
+  const {u,v}=baselineVectors(baseline),unit=['left','right'].includes(direction)?u:v,sign=['left','front'].includes(direction)?-1:1;
+  return cardinalDirection(Math.atan2(sign*unit[0],sign*unit[1])*180/Math.PI);
 }
 function projected(value) { return decimalMm(value.toFixed(9),'mm'); }
 export function calculatePair(pair,facade,settings={}) {

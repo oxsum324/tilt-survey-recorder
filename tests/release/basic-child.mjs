@@ -14,7 +14,7 @@ if(fault==='initial-console')await context.addInitScript(()=>console.error('inje
 const record={status:'running',checks:[]};let originalError;
 try {
  await withFailureEvidence({context,page,root:path.join(out,'diagnostics'),name:'basic'},()=>basicChecks({page,out,channel,
-  result:record,head:sites.manifest.commit,appHash:sha(sites.current.get('app.js')),site:server.url}));
+  result:record,version:sites.manifest.version,head:sites.manifest.commit,appHash:sha(sites.current.get('app.js')),site:server.url}));
 }catch(error){originalError=error;console.error(error.stack);process.exitCode=1;}
 // This child owns the browser. Close it directly within the original budget;
 // context protocol disposal and network restoration cannot block browser cleanup.

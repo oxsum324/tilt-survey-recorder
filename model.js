@@ -1,4 +1,5 @@
-export const VERSION='0.4.2';
+import {compass,baselineCompass} from './calc.js';
+export const VERSION='0.5.0';
 export const id=()=>crypto.randomUUID();
 const point=()=>({N:'',E:'',Z:''});
 export function measurement(axis) { return {mode:'',status:'measured',skipReason:'',A:{rounds:[{source:'offset',dxCm:'',upperCm:'',lowerCm:'',dir:axis==='inPlane'?'right':'back'}],hCm:''},B:{station:axis==='inPlane'?'rightSide':'front',rounds:[{tp:{HD:'',VD:''},tb:{HD:'',VD:''}}]},firstEnteredAt:null}; }
@@ -16,18 +17,43 @@ function stable(value) { if(Array.isArray(value))return value.map(stable);if(val
 export const modeFor=(pair,axis)=>pair[axis].mode||pair.mode;
 export function observationSnapshot(pair,facade) {
   const modes={inPlane:modeFor(pair,'inPlane'),outPlane:modeFor(pair,'outPlane')},same=modes.inPlane===modes.outPlane,hasA=Object.values(modes).includes('A'),hasC=Object.values(modes).includes('C');
-  // Only adopted data are included. Alternative modes remain intact but inactive.
-  return JSON.stringify(stable({mode:same?modes.inPlane:modes,sharedH:hasA?pair.sharedH:undefined,
+  const directionBasis={};
+  for(const axis of ['inPlane','outPlane']) {
+    if(pair[axis].status==='skipped')continue;
+    if(modes[axis]==='C')directionBasis[axis]='baseline';
+    else if(facade.facingDeg?.trim())directionBasis[axis]={facingDeg:facade.facingDeg};
+  }
+  // Alternative measurement modes remain intact but inactive.
+  return JSON.stringify(stable({mode:same?modes.inPlane:modes,directionBasis:Object.keys(directionBasis).length?directionBasis:undefined,sharedH:hasA?pair.sharedH:undefined,
     sharedHeight:hasA&&pair.sharedH?pair.inPlane.A.hCm:undefined,
     inPlane:pair.inPlane.status==='skipped'?{status:'skipped',reason:pair.inPlane.skipReason}:{status:'measured',data:adopted(pair.inPlane,modes.inPlane)},
     outPlane:pair.outPlane.status==='skipped'?{status:'skipped',reason:pair.outPlane.skipReason}:{status:'measured',data:adopted(pair.outPlane,modes.outPlane)},
     C:hasC?{rounds:pair.C.rounds}:undefined,baseline:hasC?facade.baseline:undefined}));
 }
 function adopted(m,mode){return mode==='C'?undefined:mode==='A'?{hCm:m.A.hCm,rounds:m.A.rounds}:{station:m.B.station,rounds:m.B.rounds};}
-export function isConfirmed(pair,facade) {return pair.confirmed?.snapshot===observationSnapshot(pair,facade);}
+export function isConfirmed(pair,facade) {
+  if(!pair.confirmed)return false;
+  const current=observationSnapshot(pair,facade);
+  if(pair.confirmed.snapshot===current)return true;
+  try {
+    const before=JSON.parse(pair.confirmed.snapshot),after=JSON.parse(current);
+    if(Object.hasOwn(before,'directionBasis'))return false;
+    delete after.directionBasis;
+    if(JSON.stringify(stable(before))!==JSON.stringify(stable(after)))return false;
+    if(!facade.facingDeg?.trim())return true;
+    for(const axis of ['inPlane','outPlane']) {
+      if(pair[axis].status==='skipped')continue;
+      if(modeFor(pair,axis)!=='C')return false;
+      const directions=axis==='inPlane'?['left','right']:['front','back'];
+      if(directions.some(direction=>compass(direction,facade.facingDeg)!==baselineCompass(direction,facade.baseline)))return false;
+    }
+    return true;
+  }catch{return false;}
+}
 export function confirmObservation(project,pair,facade,reason='') {
   const snapshot=observationSnapshot(pair,facade),now=new Date().toISOString();
-  if(pair.confirmed&&pair.confirmed.snapshot!==snapshot) {
+  if(pair.confirmed&&isConfirmed(pair,facade))return;
+  if(pair.confirmed) {
     if(!reason.trim()) throw Error('已確認讀數更正須填原因');
     project.auditLog.push({id:id(),pairId:pair.id,index:pair.index,at:now,reason,before:pair.confirmed.snapshot,after:snapshot});
   }

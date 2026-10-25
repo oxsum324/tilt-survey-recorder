@@ -1,3 +1,4 @@
+import {VERSION} from '../../model.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import assert from 'node:assert/strict';
@@ -15,7 +16,7 @@ const {chromium}=await import(pathToFileURL(path.join(repo,'node_modules/playwri
 const {poll,reportReady}=await import(pathToFileURL(path.join(repo,'tests/poll.mjs')).href);
 const {revealControl}=await import(pathToFileURL(path.join(repo,'tests/controls.mjs')).href);
 const url=process.env.TILT_TEST_URL,head=process.env.TILT_TEST_HEAD,all=[];assert.ok(url&&head,'Use the local staged-site runner');
-const manifestUrl=new URL('deploy-manifest.json?desktop-test='+Date.now(),url),manifestResponse=await fetch(manifestUrl,{cache:'no-store'});assert.equal(manifestResponse.status,200);const manifest=await manifestResponse.json();assert.equal(manifest.commit,head);assert.equal(manifest.version,'0.4.2');await fs.writeFile(path.join(out,'deploy-manifest.json'),JSON.stringify({url:manifestUrl.href,status:manifestResponse.status,manifest},null,2));
+const manifestUrl=new URL('deploy-manifest.json?desktop-test='+Date.now(),url),manifestResponse=await fetch(manifestUrl,{cache:'no-store'});assert.equal(manifestResponse.status,200);const manifest=await manifestResponse.json();assert.equal(manifest.commit,head);assert.equal(manifest.version,VERSION);await fs.writeFile(path.join(out,'deploy-manifest.json'),JSON.stringify({url:manifestUrl.href,status:manifestResponse.status,manifest},null,2));
 for(const channel of ['chrome','msedge']){
  const browser=await chromium.launch({channel,headless:true});
  try{for(const viewport of [{width:1280,height:720},{width:1600,height:900}])for(const bright of [false,true]){
@@ -24,7 +25,7 @@ for(const channel of ['chrome','msedge']){
   const result={name,channel,browserVersion:browser.version(),viewport,bright,head,url,startedUtc:new Date().toISOString(),checks:[],errors,requests,diagnostics};
   const field=p=>page.locator(`[data-field="${p}"]`),first=()=>field('pairs.0.inPlane.A.rounds.0.dxCm'),last=()=>field('pairs.0.outPlane.A.rounds.0.dxCm');
   const tab=async t=>{await page.locator(`[data-tab="${t}"]`).click();if(t==='reports')await reportReady(page);await page.evaluate(()=>scrollTo(0,0));};
-  const seed=async()=>{await page.evaluate(async()=>{const {sampleProject}=await import('./model.js'),{replaceProject}=await import('./store.js');localStorage.removeItem('tilt-survey-disclosures');await replaceProject(sampleProject());});await page.reload();await field('header.caseNumber').waitFor();await tab('readings');};
+  const seed=async()=>{await page.evaluate(async()=>{const {sampleProject}=await import('./model.js'),{replaceProject}=await import('./store.js');localStorage.removeItem('tilt-survey-disclosures');await replaceProject(sampleProject(),[],await(await import('./store.js')).loadProject());});await page.reload();await field('header.caseNumber').waitFor();await tab('readings');};
   const uncovered=async locator=>{await poll(page,async()=>assert.equal(await locator.evaluate(e=>{const r=e.getBoundingClientRect();return document.activeElement===e&&document.elementFromPoint(r.x+r.width/2,r.y+r.height/2)===e&&r.top>=document.querySelector('#liveResults').getBoundingClientRect().bottom+8&&r.bottom<=innerHeight;}),true));};
   const geometry=()=>last().evaluate(e=>({top:e.getBoundingClientRect().top,bottom:e.getBoundingClientRect().bottom,resultsBottom:document.querySelector('#liveResults').getBoundingClientRect().bottom,scrollPaddingTop:getComputedStyle(document.documentElement).scrollPaddingTop,focused:document.activeElement===e}));
   const check=async(label,fn)=>{try{const data=await fn();result.checks.push({label,status:'pass',data});console.log(`PASS ${name}: ${label}`);}catch(error){result.checks.push({label,status:'fail',error:error.message});await page.screenshot({path:path.join(dir,`failure-${result.checks.length}.png`),fullPage:false}).catch(()=>{});console.log(`FAIL ${name}: ${label}: ${error.message}`);}};
@@ -32,7 +33,7 @@ for(const channel of ['chrome','msedge']){
    await page.goto(url);await field('header.caseNumber').waitFor();await seed();
    if(bright)await page.locator('#sunlightButton').click();
    await check('版本與六頁桌機版面',async()=>{
-    await poll(page,async()=>assert.equal(await page.evaluate(async()=>(await import('./model.js')).VERSION),'0.4.2'));
+    await poll(page,async()=>assert.equal(await page.evaluate(async()=>(await import('./model.js')).VERSION),VERSION));
     await poll(page,async()=>assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('sunlight')),bright));
     for(const t of ['case','facades','readings','photos','map','reports']){await tab(t);await poll(page,async()=>assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true));}
     await tab('readings');await page.screenshot({path:path.join(dir,'readings.png'),fullPage:false});return {viewport};

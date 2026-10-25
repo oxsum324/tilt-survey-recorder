@@ -1,5 +1,5 @@
 import {calculatePair} from './calc.js';
-import {labels,isConfirmed,modeFor} from './model.js';
+import {labels,isConfirmed,modeFor,VERSION} from './model.js';
 import {sketch,buildingParameters,escapeXml as esc} from './sketch.js';
 export function bearingText(value){
   if(value===null)return '方位未定義';
@@ -10,7 +10,7 @@ export function bearingText(value){
 }
 const field=(h,key)=>esc(h[key]||'○○');
 const footer='△X、H 為實測值，傾斜率＝△X／H，分母取整數（四捨五入）。圖示傾斜角度經放大，非依比例；立面為參數化示意，非實測立面。';
-export const title=(p,name,unit='公分')=>`<header class="sheet-header"><div class="org">${field(p.header,'orgName')}</div><div>鑑定案編號：${field(p.header,'caseNumber')}</div><h2>${name}</h2><div class="sheet-meta"><span>使用儀器：${field(p.header,'instrument')}</span><span>測量日期：${field(p.header,'surveyDate')}</span><span>住戶編號：${field(p.header,'householdNo')}</span><span>單位：${unit}</span></div></header>`;
+export const title=(p,name,unit='公分')=>`<header class="sheet-header"><div class="org">${field(p.header,'orgName')}</div><div>鑑定案編號：${field(p.header,'caseNumber')}　<small>計算核心 V${VERSION}</small></div><h2>${name}</h2><div class="sheet-meta"><span>使用儀器：${field(p.header,'instrument')}</span><span>測量日期：${field(p.header,'surveyDate')}</span><span>住戶編號：${field(p.header,'householdNo')}</span><span>單位：${unit}</span></div></header>`;
 function time(value){if(!value)return '尚未確認';const date=new Date(value);return Number.isNaN(+date)?esc(value):esc(new Intl.DateTimeFormat('zh-TW',{timeZone:'Asia/Taipei',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(date))+'（臺灣時間）';}
 export function reportIssues(project) {
   const problems=[];if(!project.pairs.length)problems.push('尚無測點組');
@@ -52,7 +52,7 @@ export function rawReport(project) {
       return `<tr><th>${l[axis]}<br>模式 ${modeFor(pair,axis)}</th><td>${rawDetails(pair,axis)}</td></tr><tr><th>計算過程</th><td>${process}${v.warnings.length?`<br>${v.warnings.map(esc).join('<br>')}`:''}</td></tr>`;
     }).join('');
     const composite=r.inPlane.composite||r.outPlane.composite;
-    const coords=['inPlane','outPlane'].some(axis=>modeFor(pair,axis)==='C')?`<table class="raw-table"><caption>共用座標與立面基準（單位 m，北＝0°，順時針）</caption><tbody>${pair.C.rounds.map((c,i)=>`<tr><th>第 ${i+1} 回</th><td>TP：N ${esc(c.tp.N)}、E ${esc(c.tp.E)}、Z ${esc(c.tp.Z)}<br>TB：N ${esc(c.tb.N)}、E ${esc(c.tb.E)}、Z ${esc(c.tb.Z)}</td></tr>`).join('')}<tr><th>立面基準</th><td>${f.baseline.method==='azimuth'?`由左至右方位角 α＝${esc(f.baseline.azimuthDeg)}°`:`A（左端）：N ${esc(f.baseline.A.N)}、E ${esc(f.baseline.A.E)}<br>B（右端）：N ${esc(f.baseline.B.N)}、E ${esc(f.baseline.B.E)}`}</td></tr>${composite?`<tr><th>合成參考值</th><td>|d|＝${composite.dxMm} mm；${composite.denominator?`1／${composite.denominator}`:'未量得偏移'}；${bearingText(composite.bearingDeg)}（不列入成果表）</td></tr>`:''}</tbody></table>`:'';
+    const coords=['inPlane','outPlane'].some(axis=>modeFor(pair,axis)==='C')?`<table class="raw-table"><caption>共用座標與立面基準（單位 m，北＝0°，順時針）</caption><tbody>${pair.C.rounds.map((c,i)=>`<tr><th>第 ${i+1} 回</th><td>TP：N ${esc(c.tp.N)}、E ${esc(c.tp.E)}、Z ${esc(c.tp.Z)}<br>TB：N ${esc(c.tb.N)}、E ${esc(c.tb.E)}、Z ${esc(c.tb.Z)}</td></tr>`).join('')}<tr><th>立面基準</th><td>${f.baseline.method==='azimuth'?`由左至右方位角 α＝${esc(f.baseline.azimuthDeg)}°`:`A（左端）：N ${esc(f.baseline.A.N)}、E ${esc(f.baseline.A.E)}<br>B（右端）：N ${esc(f.baseline.B.N)}、E ${esc(f.baseline.B.E)}`}</td></tr>${composite?`<tr><th>合成參考值</th><td>|d|＝${composite.dxMm} mm；H＝${composite.hMm} mm；${composite.dxMm===0?'未量得偏移':composite.denominator===0?'整數 1／n 表達不適用':`1／${composite.denominator}`}；${bearingText(composite.bearingDeg)}（不列入成果表）</td></tr>`:''}</tbody></table>`:'';
     html+=`<section class="sheet raw-sheet">${title(project,'傾斜測量原始讀數表','見各欄')}<h3>測點組 ${pair.index}｜${esc(f.name)}｜${l.tp}、${l.tb}</h3><p>方向基準：觀看者站在立面外、面向立面。立面內正值向右；立面外正值向後。</p><table class="raw-table"><tbody>${rows}</tbody></table>${coords}<p>下測點離地高度：${pair.tbHeightCm===''?'未量測':`${esc(pair.tbHeightCm)} cm`}；現場備註：${esc(pair.note||'無')}</p><p>讀數確認時間：${time(pair.confirmed?.at)}</p><p>表列值取至 1 mm（0.1 cm），分母以表列 H ÷ ΔX 四捨五入。原始小數精度保留至最後捨入；兩回為有號位移平均。</p><p>提示設定（可調整）：較差 ${esc(project.settings.toleranceMm)} mm；小偏移 ${esc(project.settings.minOffsetMm)} mm；短垂距 ${esc(project.settings.minHeightCm)} cm。</p></section>`;
     // Corrections on their own flowing pages; preserve every before/after value.
     for(const log of project.auditLog.filter(a=>a.pairId===pair.id))html+=`<section class="sheet audit-sheet">${title(project,'讀數更正紀錄','見各欄')}<h3>測點組 ${pair.index}｜${time(log.at)}</h3><p>原因：${esc(log.reason)}</p><h4>更正前原始值</h4><pre>${esc(JSON.stringify(JSON.parse(log.before),null,2))}</pre><h4>更正後原始值</h4><pre>${esc(JSON.stringify(JSON.parse(log.after),null,2))}</pre></section>`;

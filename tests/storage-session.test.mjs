@@ -25,6 +25,12 @@ test('stale same-case writes are rejected even after a separate read',()=>fixtur
  await assert.rejects(b.evaluate(async()=>{loaded.header.address='stale-second-tab';await store.saveProject(loaded);}),/其他分頁|較新|版本|重新載入/);
  assert.equal((await a.evaluate(()=>store.loadProject())).header.caseNumber,'newer-first-tab');
 }));
+test('concurrent writers with the same revision have exactly one winner',()=>fixture(async(a,b)=>{
+ await seed(a);for(const page of [a,b])await page.evaluate(async()=>globalThis.loaded=await store.loadProject());
+ const outcomes=await Promise.allSettled([a.evaluate(async()=>{loaded.header.caseNumber='writer-a';await store.saveProject(loaded);}),b.evaluate(async()=>{loaded.header.caseNumber='writer-b';await store.saveProject(loaded);})]);
+ assert.equal(outcomes.filter(r=>r.status==='fulfilled').length,1);assert.equal(outcomes.filter(r=>r.status==='rejected').length,1);
+ assert.match((await a.evaluate(()=>store.loadProject())).header.caseNumber,/^writer-[ab]$/);
+}));
 test('stale replacement writes cannot restore old project and old media stay exportable',()=>fixture(async(a,b)=>{
  const old=await seed(a,sampleProject(),[{id:'old-media',text:'old-original'}]);
  await b.evaluate(async()=>globalThis.loaded=await store.loadProject());

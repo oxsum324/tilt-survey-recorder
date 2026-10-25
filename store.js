@@ -1,29 +1,76 @@
-import {projectFingerprint,mediaIds,validateBackupMedia} from './integrity.js';
+import {projectFingerprint,mediaIds,validateBackupMedia,verifyFingerprint} from './integrity.js';
 // IndexedDB transaction / media backup core adapted from:
 // oxsum324/level-survey-recorder, store.js, commit 78f2ae02646510290854e89ff1ba901776bce9f5.
 // 複製後獨立演進。 Normalization, strict import checks, and completion handlers extended here.
 import {validateMarks} from './annotation-geometry.js';
 import {createProject,createFacade,createPair,measurement,VERSION} from './model.js';
 const DB_NAME='tilt-survey-v1';
+const DB_VERSION=2;
+const storageTokens=new WeakMap();
 const done=transaction=>new Promise((resolve,reject)=>{transaction.oncomplete=resolve;transaction.onabort=()=>reject(transaction.error||Error('本機儲存交易已中止'));transaction.onerror=()=>reject(transaction.error);});
 const result=request=>new Promise((resolve,reject)=>{request.onsuccess=()=>resolve(request.result);request.onerror=()=>reject(request.error);});
+export class StorageConflictError extends Error {
+  constructor(){super('其他分頁已保存較新案件；請先匯出目前草稿，再重新載入。');this.name='StorageConflictError';}
+}
 async function openDatabase() {
-  const request=indexedDB.open(DB_NAME,1);
-  request.onupgradeneeded=()=>{for(const name of ['project','media']) if(!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name);};
+  const request=indexedDB.open(DB_NAME,DB_VERSION);
+  request.onupgradeneeded=()=>{for(const name of ['project','media'])if(!request.result.objectStoreNames.contains(name))request.result.createObjectStore(name);};
   return result(request);
 }
 async function operation(name,mode,action) {
   const db=await openDatabase();
-  try {const t=db.transaction(name,mode),completion=done(t),r=result(action(t.objectStore(name)));const [value]=await Promise.all([r,completion]);return value;} finally {db.close();}
+  try {const t=db.transaction(name,mode),completion=done(t),r=result(action(t.objectStore(name)));const [value]=await Promise.all([r,completion]);return value;}finally{db.close();}
 }
-export const loadProject=()=>operation('project','readonly',s=>s.get('current'));
-export const saveProject=p=>operation('project','readwrite',s=>s.put(p,'current'));
-export const saveMedia=(id,blob)=>operation('media','readwrite',s=>s.put(blob,id));
-export const loadMedia=id=>operation('media','readonly',s=>s.get(id));
-export async function replaceProject(project,media=[]) {
+function revision(value){if(value===undefined)return 0;if(!Number.isSafeInteger(value)||value<0)throw Error('本機儲存版本資料無效，請先匯出草稿。');return value;}
+export async function loadProject(){
   const db=await openDatabase();
-  try {const t=db.transaction(['project','media'],'readwrite'),completion=done(t);t.objectStore('project').put(project,'current');const s=t.objectStore('media');s.clear();for(const item of media)s.put(item.blob,item.id);await completion;} finally {db.close();}
+  try{
+    const t=db.transaction('project','readonly'),completion=done(t),s=t.objectStore('project');
+    const [p,r]=await Promise.all([result(s.get('current')),result(s.get('revision')),completion]);
+    if(p)storageTokens.set(p,{id:p.id,revision:revision(r)});
+    return p;
+  }finally{db.close();}
 }
+async function sameBlob(a,b){
+  if(a.size!==b.size)return false;
+  const [x,y]=await Promise.all([a.arrayBuffer(),b.arrayBuffer()]);
+  const [hx,hy]=await Promise.all([crypto.subtle.digest('SHA-256',x),crypto.subtle.digest('SHA-256',y)]);
+  return new Uint8Array(hx).every((value,index)=>value===new Uint8Array(hy)[index]);
+}
+export const loadMedia=id=>operation('media','readonly',s=>s.get(id));
+export async function saveMedia(id,blob){
+  if(typeof id!=='string'||!id||!(blob instanceof Blob))throw Error('媒體原檔資料無效');
+  const previous=await loadMedia(id);
+  if(previous){if(await sameBlob(previous,blob))return;throw Error('媒體識別已存在且原檔不同，未覆寫既有原檔。');}
+  try{await operation('media','readwrite',s=>s.add(blob,id));}catch(error){
+    if(error?.name==='ConstraintError')throw Error('媒體識別已存在，未覆寫既有原檔。');
+    throw error;
+  }
+}
+async function writeProject(project,previousProject,media,replacing=false){
+  const token=storageTokens.get(previousProject)||{id:null,revision:0},pending=[];
+  for(const item of media){
+    const previous=await loadMedia(item.id);
+    if(previous){if(!await sameBlob(previous,item.blob))throw Error('匯入媒體識別與既有原檔不同，案件未取代。');}
+    else pending.push(item);
+  }
+  const db=await openDatabase();
+  try{
+    const t=db.transaction(media.length?['project','media']:['project'],'readwrite'),completion=done(t),s=t.objectStore('project');
+    try{
+      const [current,r]=await Promise.all([result(s.get('current')),result(s.get('revision'))]),currentRevision=revision(r);
+      if(token.id!==(current?.id||null)||token.revision!==currentRevision||!replacing&&current&&project.id!==current.id)throw new StorageConflictError();
+      if(!Number.isSafeInteger(currentRevision+1))throw Error('本機儲存版本已超出支援範圍。');
+      const next={id:project.id,revision:currentRevision+1};
+      s.put(project,'current');s.put(next.revision,'revision');
+      for(const item of pending)t.objectStore('media').add(item.blob,item.id);
+      await completion;
+      storageTokens.set(project,next);if(!replacing&&previousProject)storageTokens.set(previousProject,next);
+    }catch(error){try{t.abort();}catch{}await completion.catch(()=>{});throw error;}
+  }finally{db.close();}
+}
+export const saveProject=(project,previousProject=project)=>writeProject(project,previousProject,[]);
+export const replaceProject=(project,media=[],previousProject=project)=>writeProject(project,previousProject,media,true);
 const object=(value)=>value&&typeof value==='object'&&!Array.isArray(value);
 function identifier(value){raw(value);if(!/^[A-Za-z0-9_-]{1,100}$/.test(value))throw Error('案件或媒體識別格式無效');return value;}
 function raw(value) { if(typeof value!=='string'||value.length>3000) throw Error('案件文字或原始讀數格式無效');return value; }
@@ -78,7 +125,7 @@ export function normalizeProject(value) {
   for(const log of p.auditLog) {for(const key of ['at','reason','before','after'])if(typeof log?.[key]!=='string')throw Error('更正紀錄內容無效');try{JSON.parse(log.before);JSON.parse(log.after);}catch{throw Error('更正前後紀錄格式無效');}}
   if(p.map!==null){const m=p.map;if(!object(m))throw Error('底圖資料無效');identifier(m.mediaId);for(const key of ['fileName','source','capturedOn','approxAddress','addedAt'])raw(m[key]);if(!Number.isFinite(m.width)||!Number.isFinite(m.height)||m.width<1||m.height<1||m.width*m.height>100000000||m.capturedOn&&!/^\d{4}-\d{2}-\d{2}$/.test(m.capturedOn)||Number.isNaN(Date.parse(m.addedAt)))throw Error('底圖尺寸或日期無效');}
   if(!p.map&&p.pairs.some(q=>q.mapMarker))throw Error('測點位置缺少對應底圖');
-  p.appVersion=VERSION;return p;
+  p.appVersion=VERSION;if(storageTokens.has(value))storageTokens.set(p,storageTokens.get(value));return p;
 }
 const blobAsDataUrl=blob=>new Promise((resolve,reject)=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(blob);});
 export async function makeBackup(project,read=loadMedia,encode=blobAsDataUrl) {
@@ -99,4 +146,10 @@ export function parseBackup(contents) {
   validateBackupMedia(project,media);
   if(backup.integrity!==undefined&&(backup.integrity?.algorithm!=='SHA-256'||! /^[a-f0-9]{64}$/.test(backup.integrity.sha256)))throw Error('案件指紋格式無效');
   return {project,media,integrity:backup.integrity||null};
+}
+
+export async function parseVerifiedBackup(contents){
+  const backup=parseBackup(contents),verification=await verifyFingerprint(backup);
+  if(verification.matches===false)throw Error('案件檔指紋不一致，未匯入或取代目前案件。');
+  return backup;
 }

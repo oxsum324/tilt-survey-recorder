@@ -28,7 +28,7 @@ try{for(const channel of channels){
   try{
    await withFailureEvidence({context,page,name},async()=>{
    await page.goto(base);await page.locator('[data-field="header.caseNumber"]').waitFor();
-   await page.evaluate(async()=>{const {sampleProject}=await import('./model.js'),{replaceProject}=await import('./store.js');await replaceProject(sampleProject());});
+   await page.evaluate(async()=>{const {sampleProject}=await import('./model.js'),{replaceProject}=await import('./store.js');await replaceProject(sampleProject(),[],await(await import('./store.js')).loadProject());});
    await page.reload();await page.locator('[data-tab="readings"]').click();if(bright)await page.locator('#sunlightButton').click();
    await poll(page,async()=>assert.equal(await page.evaluate(()=>document.documentElement.classList.contains('readings-active')&&document.body.classList.contains('readings-active')),true));
    await poll(page,async()=>assert.equal(await page.locator('#liveResults').evaluate(e=>Math.round(parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop)*1000)===Math.round((parseFloat(getComputedStyle(e).top)+e.getBoundingClientRect().height+8)*1000)),true));

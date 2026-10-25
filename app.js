@@ -19,6 +19,7 @@ import {
   replaceProject,
   makeBackup,
   parseBackup,
+  parseVerifiedBackup,
 } from "./store.js";
 import { buildingParameters, escapeXml as esc } from "./sketch.js";
 import { outputIssues, fullReport } from "./media-report.js";
@@ -40,6 +41,7 @@ let project,
   saving = Promise.resolve(),
   failedSave = false,
   storageBlocked = false,
+  replacing = false,
   reportStale = true;
 let preparedShare = null,
   shareGeneration = 0,
@@ -95,11 +97,11 @@ function updateStatus() {
 }
 function queueSave() {
   clearTimeout(saveTimer);
-  if (storageBlocked) return Promise.resolve();
-  const snapshot = structuredClone(project);
+  if (storageBlocked || replacing) return Promise.resolve();
+  const origin = project, snapshot = structuredClone(project);
   saving = saving
     .catch(() => {})
-    .then(() => saveProject(snapshot))
+    .then(() => saveProject(snapshot, origin))
     .then(() => {
       failedSave = false;
       if (snapshot.updatedAt === project.updatedAt)
@@ -107,6 +109,7 @@ function queueSave() {
       updateStatus();
     })
     .catch((e) => {
+      if (e.name === "StorageConflictError") storageBlocked = true;
       failedSave = true;
       updateStatus();
       notice(`本機保存未完成：${e.message}。目前畫面資料仍可匯出。`, true);
@@ -114,6 +117,7 @@ function queueSave() {
   return saving;
 }
 function changed() {
+  if (replacing) return;
   invalidateShare();
   document.documentElement.dataset.saveState = "pending";
   project.updatedAt = new Date(
@@ -724,6 +728,7 @@ function invalidateShare() {
   button.disabled = sharing;
 }
 async function caseFile() {
+  if (replacing) throw Error("案件取代中，請稍候再匯出。");
   const origin = project,
     backupProject = structuredClone(project);
   backupProject.lastExportedAt = backupProject.updatedAt;
@@ -811,20 +816,42 @@ async function shareCase() {
   }
 }
 async function adopt(newProject, media = []) {
+  if (replacing) throw Error("案件取代中，請稍候再操作。");
+  if (storageBlocked) throw Error("本分頁已停止寫入；請先匯出目前草稿，再重新載入。");
+  const previousProject = project;
+  replacing = true;
+  workspace.inert = true;
+  desktopActions.inert = true;
+  document.documentElement.dataset.replacing = "true";
   invalidateShare();
   clearTimeout(saveTimer);
-  await saving;
-  await replaceProject(newProject, media);
-  project = newProject;
-  document.documentElement.dataset.saveState = "saved";
-  reportKind = "all";
-  selectedPair = project.pairs[0]?.id;
-  selectedFacade = project.facades[0].id;
-  failedSave = false;
-  storageBlocked = false;
-  reportStale = true;
-  updateStatus();
-  render();
+  try {
+    await saving;
+    if (failedSave) throw Error("目前案件尚未保存，請先匯出草稿再處理。");
+    await replaceProject(newProject, media, previousProject);
+    project = newProject;
+    document.documentElement.dataset.saveState = "saved";
+    reportKind = "all";
+    selectedPair = project.pairs[0]?.id;
+    selectedFacade = project.facades[0].id;
+    failedSave = false;
+    storageBlocked = false;
+    reportStale = true;
+    updateStatus();
+    render();
+  } catch (error) {
+    if (error.name === "StorageConflictError") {
+      storageBlocked = true;
+      failedSave = true;
+      updateStatus();
+    }
+    throw error;
+  } finally {
+    replacing = false;
+    workspace.inert = false;
+    desktopActions.inert = false;
+    delete document.documentElement.dataset.replacing;
+  }
 }
 async function action(name) {
   const pair = project.pairs.find((p) => p.id === selectedPair),
@@ -974,6 +1001,12 @@ const mediaUI = createMediaUI({
   },
 });
 setupDisplay();
+for (const name of ["click", "input", "change", "paste", "pointerdown", "pointermove", "pointerup", "keydown"])
+  document.addEventListener(name, (event) => {
+    if (!replacing) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
 document.addEventListener("click", async (event) => {
   const b = event.target.closest("button");
   if (!b || b.closest("#actionDialog")) return;
@@ -1104,10 +1137,10 @@ $("#importFile").addEventListener("change", async (event) => {
   if (!file) return;
   try {
     if (file.size > 250 * 1024 * 1024) throw Error("案件檔超過 250 MB");
-    const backup = parseBackup(await file.text());
+    const backup = await parseVerifiedBackup(await file.text());
     if (await allowReplace("匯入案件檔")) {
       await adopt(backup.project, backup.media);
-      notice("案件檔已匯入。");
+      notice(backup.integrity ? "案件檔已匯入。" : "案件檔已匯入。此舊檔未附指紋，未宣稱內容驗證一致。");
     }
   } catch (e) {
     notice(`匯入未完成：${e.message}`, true);
@@ -1156,7 +1189,7 @@ new ResizeObserver(([entry]) =>
 ).observe($(".app-header"));
 window.addEventListener("pagehide", () => {
   clearTimeout(saveTimer);
-  if (project) queueSave();
+  if (project && !replacing) queueSave();
 });
 let swReload = false,
   updateRequested = false,
@@ -1221,13 +1254,13 @@ window.addEventListener("offline", () => {
 try {
   const saved = await loadProject();
   project = saved ? normalizeProject(saved) : createProject();
-  if (!saved) await saveProject(project);
+  if (!saved || saved.appVersion !== project.appVersion) await saveProject(project);
 } catch (e) {
-  project = createProject();
+  project ||= createProject();
   failedSave = true;
   storageBlocked = true;
   notice(
-    `無法讀取本機案件：${e.message}。原本案件未覆寫；目前畫面不會自動保存，可先匯入備份或明確另建案件。`,
+    `無法讀取本機案件：${e.message}。原本案件未覆寫；目前畫面不會自動保存，請先匯出目前草稿，再重新載入處理。`,
     true,
   );
 }

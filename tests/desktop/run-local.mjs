@@ -1,3 +1,4 @@
+import {VERSION} from '../../model.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import http from 'node:http';
@@ -51,7 +52,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const url = `http://127.0.0.1:${server.address().port}/?release=0.4.2`;
+const url = `http://127.0.0.1:${server.address().port}/?release=${VERSION}`;
 const python = process.env.TILT_TEST_PYTHON || 'python';
 const env = {...process.env, TILT_TEST_URL: url, TILT_TEST_HEAD: head,
   TILT_DESKTOP_RUN_DIR: runDir, TILT_DESKTOP_EVIDENCE_DIR: out,

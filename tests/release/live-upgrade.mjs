@@ -103,7 +103,7 @@ try {
     await Promise.all([page.waitForEvent('load'), page.locator('#updateButton').click()]); await field('header.caseNumber').waitFor();
     const actual = await runtime(page);
     for (const name of ['app.js', 'style.css']) assert.equal(actual[name], sha(sites.current.get(name)), 'runtime must match actual published main');
-    const after = await snapshot(page); assert.deepEqual(after, before);
+    const after = await snapshot(page); assert.deepEqual(after, {...before,project:{...before.project,appVersion:sites.manifest.version}});
     await fs.writeFile(path.join(out, 'after.json'), JSON.stringify(after, null, 2));
     pass('new-runtime-and-all-media-retained', {actual, fingerprint: after.fingerprint});
     const keys = await page.evaluate(() => caches.keys()), key = sites.current.get('sw.js').toString().match(/const CACHE='([^']+)'/)[1];
@@ -113,7 +113,7 @@ try {
     phase = 'offline'; const url = sites.url + '?upgrade-offline=' + channel;
     gate.setOnline(false, 'new-offline-before-navigation');
     await context.setOffline(true); await page.goto(url); await field('header.caseNumber').waitFor();
-    const offline = await snapshot(page); assert.deepEqual(offline, before);
+    const offline = await snapshot(page); assert.deepEqual(offline, {...before,project:{...before.project,appVersion:sites.manifest.version}});
     await fs.writeFile(path.join(out, 'offline.json'), JSON.stringify(offline, null, 2));
     await tab('photos'); await page.locator('#annotationStage img').waitFor();
     await page.waitForFunction(() => [...document.querySelectorAll('#annotationStage img')].every(i => i.complete && i.naturalWidth > 0));
