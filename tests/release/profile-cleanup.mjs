@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import assert from 'node:assert/strict';
+import {closeOnce} from '../browser-failure-evidence.mjs';
 import {resourceState} from './resource-diagnostics.mjs';
 
 // Approved only for persistent profile teardown; diagnostic capture budgets stay unchanged.
@@ -44,28 +45,34 @@ export async function cleanupProfile({profile, context, seed, gate, failed = fal
       entry.status = 'completed';
     } catch (error) {entry.status = error.code === 'CLEANUP_TIMEOUT' ? 'timed-out' : 'failed'; entry.error = {name: error.name, message: error.message, code: error.code || null};}
     finally {clearTimeout(timer); entry.finishedUtc = new Date().toISOString(); entry.waitElapsedMs = performance.now() - entered; if (resource) entry.after = resourceState(resource);}
+    return entry;
   };
   if (gate) await attempt('transport-close', () => gate.close(), gate);
   const close = async (resource, seedResource = false) => {
     const browser = closeOwnedBrowser ? resource.browser?.() : null;
     // Only callers that launched their own isolated persistent browser opt in.
     // Browser.close avoids context-close protocol disposal before browser shutdown.
-    await attempt(seedResource ? (browser ? 'seed-browser-close' : 'seed-close') :
-      (browser ? 'browser-close' : 'context-close'), () => (browser || resource).close(), browser || resource);
+    return await attempt(seedResource ? (browser ? 'seed-browser-close' : 'seed-close') :
+      (browser ? 'browser-close' : 'context-close'), () => closeOnce(browser || resource), browser || resource);
   };
-  if (seed) await close(seed, true);
+  const closeResults = [];
+  if (seed) closeResults.push(await close(seed, true));
   // Closing needs no network restoration; avoiding setOffline removes an unbounded
   // protocol roundtrip after a failed browser. All raw network records remain intact.
-  if (context) await close(context);
-  await attempt('profile-remove', () => remove(absolute));
+  if (context) closeResults.push(await close(context));
   let absenceConfirmed = false;
-  await attempt('profile-verify-absent', async () => {
-    try {await inspect(absolute);} catch (error) {
-      if (error.code !== 'ENOENT') throw error;
-      absenceConfirmed = true; return;
-    }
-    throw Object.assign(new Error('Persistent profile still exists after removal'), {code: 'PROFILE_STILL_EXISTS'});
-  });
+  if (closeResults.every(result => result.status === 'completed')) {
+    await attempt('profile-remove', () => remove(absolute));
+    await attempt('profile-verify-absent', async () => {
+      try {await inspect(absolute);} catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+        absenceConfirmed = true; return;
+      }
+      throw Object.assign(new Error('Persistent profile still exists after removal'), {code: 'PROFILE_STILL_EXISTS'});
+    });
+  } else {
+    for (const name of ['profile-remove', 'profile-verify-absent']) stages.push({name, status: 'skipped', reason: 'close-not-completed'});
+  }
   const result = {status: stages.every(s => s.status === 'completed') ? 'completed' : 'failed',
     verification: {path: absolute, method: 'lstat', absent: absenceConfirmed && stages.at(-1).status === 'completed' ? true : null,
       status: absenceConfirmed && stages.at(-1).status === 'completed' ? 'confirmed' : 'unconfirmed'},

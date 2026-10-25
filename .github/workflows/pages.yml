@@ -97,6 +97,10 @@ jobs:
         id: teardown
         if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name teardown -Executable npm.cmd -Arguments @('run', 'test:teardown'); exit $LASTEXITCODE
+      - name: Regress first-close ownership and expected-failure cleanup acceptance
+        id: close_lifecycle
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name close_lifecycle -Executable npm.cmd -Arguments @('run', 'test:close-lifecycle'); exit $LASTEXITCODE
       - name: Data tests (92)
         id: data
         if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}

@@ -28,19 +28,23 @@ const timed = async (label, operation, timeoutMs) => {
   } finally { clearTimeout(timer); }
 };
 
+export function closeOnce(resource) {
+  if (!closing.has(resource)) {
+    const start = performance.now(), diagnostic = {requestedUtc: new Date().toISOString(), before: resourceState(resource), nativeStatus: 'queued', waitFailures: []};
+    const late = () => {if (diagnostic.waitFailures.length) {try {console.error('Late browser close settlement: ' + JSON.stringify(diagnostic));} catch {}}};
+    const promise = Promise.resolve().then(() => {diagnostic.nativeStatus = 'running'; diagnostic.enteredUtc = new Date().toISOString(); return resource.close();}).then(value => {
+      diagnostic.nativeStatus = 'completed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.after = resourceState(resource); late(); return value;
+    }, error => {diagnostic.nativeStatus = 'failed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.error = errorRecord(error); late(); throw error;});
+    closing.set(resource, {promise, diagnostic});
+  }
+  return closing.get(resource).promise;
+}
+
 // A failed cleanup must not replace an exception already being rethrown by the guard.
 export async function closeAfterEvidence(resource, timeoutMs = capturePolicy.cleanupMs) {
   const started = Date.now();
   try {
-    if (!closing.has(resource)) {
-      const start = performance.now(), diagnostic = {requestedUtc: new Date().toISOString(), before: resourceState(resource), nativeStatus: 'queued', waitFailures: []};
-      const late = () => {if (diagnostic.waitFailures.length) {try {console.error('Late browser close settlement: ' + JSON.stringify(diagnostic));} catch {}}};
-      const promise = Promise.resolve().then(() => {diagnostic.nativeStatus = 'running'; diagnostic.enteredUtc = new Date().toISOString(); return resource.close();}).then(value => {
-        diagnostic.nativeStatus = 'completed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.after = resourceState(resource); late(); return value;
-      }, error => {diagnostic.nativeStatus = 'failed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.error = errorRecord(error); late(); throw error;});
-      closing.set(resource, {promise, diagnostic});
-    }
-    await timed('diagnostic cleanup', () => closing.get(resource).promise, timeoutMs);
+    await timed('diagnostic cleanup', () => closeOnce(resource), timeoutMs);
     return {status: 'closed', elapsedMs: Date.now() - started, diagnostic: closeDiagnostics(resource)};
   } catch (error) {
     closing.get(resource)?.diagnostic.waitFailures.push({at: new Date().toISOString(), timeoutMs, waitElapsedMs: Date.now() - started, error: errorRecord(error)});

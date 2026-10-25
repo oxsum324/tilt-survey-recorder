@@ -24,11 +24,11 @@ test('successful isolated profile teardown uses the independent 10000ms shared d
   await assert.rejects(fs.stat(p), {code: 'ENOENT'}); assert.equal(result.verification.absent, true); await passed('profile-complete', result);
 });
 
-test('unresponsive context is bounded by the approved 10000ms and removal is still attempted', async () => {
+test('unresponsive context is bounded by the approved 10000ms and removal is prevented until closure', async () => {
   let removed = false;
   const result = await cleanupProfile({profile: profile(), context: {close: () => new Promise(() => {})},
     failed: true, remove: async () => {removed = true;}});
-  assert.equal(result.status, 'failed'); assert.equal(result.originalFailure, true); assert.ok(removed);
+  assert.equal(result.status, 'failed'); assert.equal(result.originalFailure, true); assert.equal(removed, false);
   assert.equal(result.stages[0].status, 'timed-out'); assert.ok(result.elapsedMs < 11000); await passed('profile-unresponsive', result);
 });
 
@@ -88,11 +88,11 @@ test('cleanup lock failure exits nonzero with stderr and original failure intact
   await passed('cleanup-native-failure-and-stderr', {children: 2, rawExitCode: 1});
 });
 
-test('seed-close rejection does not skip context close or profile removal', async () => {
+test('seed-close rejection still attempts context close but prevents profile deletion', async () => {
   const calls = [];
   const result = await cleanupProfile({profile: profile(), seed: {close: async () => {calls.push('seed'); throw Error('injected seed close');}},
     context: {close: async () => calls.push('context')}, remove: async () => calls.push('remove'), failed: true});
-  assert.deepEqual(calls, ['seed', 'context', 'remove']); assert.equal(result.status, 'failed'); await passed('profile-independent-attempts', result);
+  assert.deepEqual(calls, ['seed', 'context']); assert.ok(result.stages.filter(s=>s.name.startsWith('profile-')).every(s=>s.status==='skipped'&&s.reason==='close-not-completed')); assert.equal(result.status, 'failed'); await passed('profile-independent-attempts', result);
 });
 
 test('late cleanup completion cannot mutate sealed failure receipt', async () => {

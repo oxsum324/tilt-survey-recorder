@@ -3,6 +3,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {randomUUID, createHash} from 'node:crypto';
+import {assertBasicCloseCompleted} from './basic-checks.mjs';
 import {runCaptured} from './command.mjs';
 import {runMapNegative} from './map-negative.mjs';
 import {liveUrl} from './live-site.mjs';
@@ -23,11 +24,12 @@ try {
       const name = channel + '-' + mode, out = path.join(root, name);
       const execution = await runCaptured({root: path.join(root, 'commands'), name, executable: process.execPath,
         args: [mode === 'basic' ? 'tests/release/basic-child.mjs' : 'tests/release/live-upgrade.mjs', out, channel, mode, liveHead],
-        resultFile: path.join(out, 'results.json'), expectedChecks: mode === 'basic' ? 16 : 5, requirePublication: mode === 'upgrade'});
+        resultFile: path.join(out, 'results.json'), expectedChecks: mode === 'basic' ? 16 : 5, requirePublication: true});
       assert.equal(execution.rawExitCode, 0); assert.equal(execution.exitCode, 0);
       assert.equal(execution.watchdogTriggered, false); assert.equal(execution.signal, null);
-      const {value: result} = await readPublishedResult(path.join(out, 'results.json'), {execution, requirePublication: mode === 'upgrade'});
+      const {value: result} = await readPublishedResult(path.join(out, 'results.json'), {execution, requirePublication: true});
       assert.equal(result.head, liveHead);
+      if (mode === 'basic') assertBasicCloseCompleted(result);
       if (mode === 'upgrade') assert.equal(result.svgMap.passed, true);
       await pass(name, {runtimeCommit: liveHead, checks: result.checks.length, nativeExitCode: 0});
     }

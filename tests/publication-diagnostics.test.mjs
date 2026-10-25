@@ -112,12 +112,12 @@ for (const mode of ['reject', 'unresponsive']) test('close diagnostic write ' + 
   await passed('close-diagnostic-' + mode, {originalErrorPreserved: true, artifactMs: 2000});
 });
 
-test('profile close timeout records independent native/wait phases and still attempts removal', async () => {
+test('profile close timeout records independent native/wait phases and prevents premature removal', async () => {
   let removed = false;
   const result = await cleanupProfile({profile: path.join(os.tmpdir(), 'tilt-map-live-publication-unit-' + randomUUID()),
     context: {isClosed: () => false, close: () => new Promise(() => {})}, timeoutMs: 40, remove: async () => {removed = true;}});
   assert.equal(result.status, 'failed'); assert.equal(result.stages[0].nativeStatus, 'running'); assert.equal(result.stages[0].status, 'timed-out');
-  assert.ok(result.stages[0].waitElapsedMs >= 30); assert.equal(removed, true); assert.ok(result.stages.some(s => s.name === 'profile-remove'));
+  assert.ok(result.stages[0].waitElapsedMs >= 30); assert.equal(removed, false); assert.ok(result.stages.some(s => s.name === 'profile-remove' && s.status === 'skipped'));
   await passed('profile-native-wait-diagnostics', {scope: 'unit policy 40ms; persistent profile production policy is 10000ms', result});
 });
 

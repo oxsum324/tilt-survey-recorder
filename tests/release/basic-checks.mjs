@@ -1,6 +1,7 @@
+import strictAssert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-export async function basicChecks({page,out,channel,head,appHash,site}) {
+export async function basicChecks({page,out,channel,head,appHash,site,result={}}) {
   const checks = [], diagnostics = {responses:[],httpErrors:[],consoleErrors:[],pageErrors:[],requestFailures:[]};
   let phase = 'online';
   const assert = (value,message) => {if(!value)throw new Error(message);};
@@ -11,7 +12,7 @@ export async function basicChecks({page,out,channel,head,appHash,site}) {
   page.on('pageerror',error=>diagnostics.pageErrors.push(error.message));
   page.context().on('response',response=>{const r={url:response.url(),status:response.status(),phase};diagnostics.responses.push(r);if(r.status>=400)diagnostics.httpErrors.push(r);});
   page.context().on('requestfailed',request=>diagnostics.requestFailures.push({url:request.url(),method:request.method(),resourceType:request.resourceType(),worker:request.serviceWorker()?.url()||null,error:request.failure(),phase}));
-  const result={channel,head,url:site,initialPageUrl:page.url(),startedUtc:new Date().toISOString(),checks,diagnostics,phoneTests:'deferred',realImportTests:'deferred',imagePdfValueReview:'deferred'};
+  Object.assign(result,{channel,head,url:site,initialPageUrl:page.url(),startedUtc:new Date().toISOString(),checks,diagnostics,phoneTests:'deferred',realImportTests:'deferred',imagePdfValueReview:'deferred'});
   let originalError;
   try {
     await page.setViewportSize({width:1280,height:900});
@@ -77,4 +78,12 @@ export async function basicChecks({page,out,channel,head,appHash,site}) {
   }catch(error){originalError=error;result.status='failed';result.error={name:error.name,message:error.message,stack:error.stack};await page.screenshot({path:out+'/failure.png',fullPage:true}).catch(()=>{});throw error;}
   finally{result.finalPageUrl=page.url();result.endedUtc=new Date().toISOString();try{await fs.writeFile(path.join(out,'results.json'),JSON.stringify(result,null,2));}catch(storageError){console.error('Release result storage failure: '+storageError.stack);if(!originalError)throw storageError;}}
   return result;
+}
+
+export function assertBasicCloseCompleted(result) {
+  const attempt = result.teardownAttempts?.find(item => item.name === 'browser-close');
+  strictAssert.equal(attempt?.status, 'saved', 'Basic browser close receipt must be saved');
+  strictAssert.equal(attempt?.value?.status, 'closed', 'An expected action failure cannot hide failed browser cleanup');
+  strictAssert.equal(attempt?.value?.diagnostic?.nativeStatus, 'completed', 'The first native close must have completed');
+  strictAssert.deepEqual(result.teardownErrors, []);
 }
