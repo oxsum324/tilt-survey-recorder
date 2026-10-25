@@ -97,6 +97,7 @@ test('close timeout saves actual pending native state at the unchanged 2000ms de
   assert.ok(performance.now() - start >= 2000 && performance.now() - start < 3000);
   const file = path.join(root, 'hung-close-diagnostics.json'), bytes = await fs.readFile(file), record = JSON.parse(bytes);
   assert.equal(record.operation.nativeStatus, 'running'); assert.equal(record.operation.before.connected, true);
+  assert.equal(record.operation.waitFailures[0].timeoutMs, 2000);
   finish(); await new Promise(resolve => setImmediate(resolve)); assert.equal(closeDiagnostics(resource).nativeStatus, 'completed');
   assert.deepEqual(await fs.readFile(file), bytes);
   await passed('close-timeout-native-state', {policyMs: 2000, sealedState: 'running', lateNativeState: 'completed'});

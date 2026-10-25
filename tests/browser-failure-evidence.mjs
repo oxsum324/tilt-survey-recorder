@@ -33,15 +33,17 @@ export async function closeAfterEvidence(resource, timeoutMs = capturePolicy.cle
   const started = Date.now();
   try {
     if (!closing.has(resource)) {
-      const start = performance.now(), diagnostic = {requestedUtc: new Date().toISOString(), before: resourceState(resource), nativeStatus: 'queued'};
+      const start = performance.now(), diagnostic = {requestedUtc: new Date().toISOString(), before: resourceState(resource), nativeStatus: 'queued', waitFailures: []};
+      const late = () => {if (diagnostic.waitFailures.length) {try {console.error('Late browser close settlement: ' + JSON.stringify(diagnostic));} catch {}}};
       const promise = Promise.resolve().then(() => {diagnostic.nativeStatus = 'running'; diagnostic.enteredUtc = new Date().toISOString(); return resource.close();}).then(value => {
-        diagnostic.nativeStatus = 'completed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.after = resourceState(resource); return value;
-      }, error => {diagnostic.nativeStatus = 'failed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.error = errorRecord(error); throw error;});
+        diagnostic.nativeStatus = 'completed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.after = resourceState(resource); late(); return value;
+      }, error => {diagnostic.nativeStatus = 'failed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.error = errorRecord(error); late(); throw error;});
       closing.set(resource, {promise, diagnostic});
     }
     await timed('diagnostic cleanup', () => closing.get(resource).promise, timeoutMs);
     return {status: 'closed', elapsedMs: Date.now() - started, diagnostic: closeDiagnostics(resource)};
   } catch (error) {
+    closing.get(resource)?.diagnostic.waitFailures.push({at: new Date().toISOString(), timeoutMs, waitElapsedMs: Date.now() - started, error: errorRecord(error)});
     console.error(`Browser diagnostic cleanup failure: ${error.stack || error}`);
     console.error('Browser close diagnostic: ' + JSON.stringify({timeoutMs, waitElapsedMs: Date.now() - started, operation: closeDiagnostics(resource), stateAtTimeout: resourceState(resource)}));
     if (!alreadyFailed.has(resource)) throw error;
@@ -110,7 +112,8 @@ export async function withFailureEvidence({context, page, name, root = failureEv
         traceStage('native-stop-resolved', {legacyName: true, boundary: 'legacy stop wrapper resolution'});
       }, error => {
         record.traceStop.status = 'failed'; record.traceStop.error = errorRecord(error);
-        record.traceStop.finishedUtc = new Date().toISOString(); traceStage('stop-api-rejected', {error: errorRecord(error)}); throw error;
+        record.traceStop.finishedUtc = new Date().toISOString(); traceStage('stop-api-rejected', {error: errorRecord(error)});
+        traceStage('native-stop-rejected', {legacyName: true, boundary: 'legacy stop wrapper rejection', error: errorRecord(error)}); throw error;
       });
     }
     return traceStop;

@@ -66,7 +66,7 @@ jobs:
         id: font_install
         run: ./tests/ci/run-command.ps1 -Name font_install -Executable ./tests/desktop/install-ci-font.ps1; exit $LASTEXITCODE
       # Independent test failures remain failures; run later suites for complete evidence.
-      # No continue-on-error: checks/build/deploy gates still reject any failure.
+      # Every failed step still fails checks; publication gates remain unchanged.
       - name: Regress capture of browser failures before page cleanup
         id: browser_diagnostic_regressions
         if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
