@@ -118,7 +118,7 @@ test('profile close timeout records independent native/wait phases and still att
     context: {isClosed: () => false, close: () => new Promise(() => {})}, timeoutMs: 40, remove: async () => {removed = true;}});
   assert.equal(result.status, 'failed'); assert.equal(result.stages[0].nativeStatus, 'running'); assert.equal(result.stages[0].status, 'timed-out');
   assert.ok(result.stages[0].waitElapsedMs >= 30); assert.equal(removed, true); assert.ok(result.stages.some(s => s.name === 'profile-remove'));
-  await passed('profile-native-wait-diagnostics', {scope: 'unit policy 40ms; production remains 2000ms', result});
+  await passed('profile-native-wait-diagnostics', {scope: 'unit policy 40ms; persistent profile production policy is 10000ms', result});
 });
 
 test.after(async () => {

@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import {randomUUID, createHash} from 'node:crypto';
-import {cleanupProfile, applyCleanupResult} from './release/profile-cleanup.mjs';
+import {cleanupProfile, applyCleanupResult, profileCleanupPolicy} from './release/profile-cleanup.mjs';
 import {createTransportGate} from './release/transport-gate.mjs';
 import {capturePolicy} from './browser-failure-evidence.mjs';
 import {runCaptured} from './release/command.mjs';
@@ -17,19 +17,19 @@ const cases = [], read = async p => JSON.parse(await fs.readFile(p, 'utf8'));
 const passed = async (name, data) => {cases.push({name, status: 'pass', data}); await fs.writeFile(path.join(root, 'results.json'), JSON.stringify({...executionOrigin(), cases}, null, 2));};
 const profile = () => path.join(os.tmpdir(), 'tilt-map-live-regression-' + randomUUID());
 
-test('successful isolated profile teardown uses the unchanged shared deadline and deletes actual files', async () => {
+test('successful isolated profile teardown uses the independent 10000ms shared deadline and deletes actual files', async () => {
   const p = profile(); await fs.mkdir(p); await fs.writeFile(path.join(p, 'synthetic'), 'test');
   const result = await cleanupProfile({profile: p, context: {close: async () => {}}});
-  assert.equal(result.status, 'completed'); assert.equal(result.timeoutMs, capturePolicy.cleanupMs);
-  await assert.rejects(fs.stat(p), {code: 'ENOENT'}); await passed('profile-complete', result);
+  assert.equal(result.status, 'completed'); assert.equal(result.timeoutMs, profileCleanupPolicy.totalMs);
+  await assert.rejects(fs.stat(p), {code: 'ENOENT'}); assert.equal(result.verification.absent, true); await passed('profile-complete', result);
 });
 
-test('unresponsive context is bounded by the original 2000ms and removal is still attempted', async () => {
+test('unresponsive context is bounded by the approved 10000ms and removal is still attempted', async () => {
   let removed = false;
   const result = await cleanupProfile({profile: profile(), context: {close: () => new Promise(() => {})},
     failed: true, remove: async () => {removed = true;}});
   assert.equal(result.status, 'failed'); assert.equal(result.originalFailure, true); assert.ok(removed);
-  assert.equal(result.stages[0].status, 'timed-out'); assert.ok(result.elapsedMs < 3000); await passed('profile-unresponsive', result);
+  assert.equal(result.stages[0].status, 'timed-out'); assert.ok(result.elapsedMs < 11000); await passed('profile-unresponsive', result);
 });
 
 test('explicitly owned persistent browser closes directly without waiting for context protocol disposal', async () => {
@@ -37,8 +37,8 @@ test('explicitly owned persistent browser closes directly without waiting for co
   const browser = {close: async () => {calls.push('browser');}};
   const context = {browser: () => browser, close: () => {calls.push('context'); return new Promise(() => {});}};
   const result = await cleanupProfile({profile: profile(), context, closeOwnedBrowser: true, remove: async () => calls.push('remove')});
-  assert.deepEqual(calls, ['browser', 'remove']); assert.equal(result.status, 'completed'); assert.equal(result.timeoutMs, 2000);
-  assert.deepEqual(result.stages.map(s => s.name), ['browser-close', 'profile-remove']);
+  assert.deepEqual(calls, ['browser', 'remove']); assert.equal(result.status, 'completed'); assert.equal(result.timeoutMs, 10000);
+  assert.deepEqual(result.stages.map(s => s.name), ['browser-close', 'profile-remove', 'profile-verify-absent']);
   await passed('owned-browser-direct-close', result);
 });
 
@@ -138,6 +138,35 @@ for (const channel of ['chrome', 'msedge']) test(channel + ' reproduces real upd
   assert.ok(lifecycle.some(e => e.type === 'cdp-workerVersionUpdated'));
   assert.ok(lifecycle.some(e => e.type === 'worker-script-body' && e.data.sha256 === result.newWorkerSha256 && e.data.responsePhase === 'offline'));
   await passed(channel + '-updater-offline-reproduction', {realBrowser: true, failures: 28, preciseCauseInControlledFixture: true});
+});
+
+test('profile policy alone accepts a 2250ms owned close and confirms actual deletion', async () => {
+  const p = profile(); await fs.mkdir(p); await fs.writeFile(path.join(p, 'synthetic'), 'test');
+  const browser = {close: async () => new Promise(resolve => setTimeout(resolve, 2250))};
+  const result = await cleanupProfile({profile: p, context: {browser: () => browser}, closeOwnedBrowser: true});
+  assert.equal(result.status, 'completed'); assert.equal(result.timeoutMs, 10000);
+  assert.deepEqual(capturePolicy, {artifactMs: 2000, totalMs: 12000, cleanupMs: 2000});
+  assert.equal(result.verification.absent, true); assert.equal(result.verification.status, 'confirmed');
+  await assert.rejects(fs.lstat(p), {code: 'ENOENT'}); await passed('profile-independent-budget-and-absence', result);
+});
+
+test('a no-op removal cannot claim a remaining actual profile was deleted', async () => {
+  const p = profile(); await fs.mkdir(p); await fs.writeFile(path.join(p, 'synthetic'), 'test');
+  try {
+    const result = await cleanupProfile({profile: p, remove: async () => {}});
+    assert.equal(result.status, 'failed'); assert.equal(result.verification.status, 'unconfirmed');
+    assert.equal(result.verification.absent, null);
+    assert.equal(result.stages.at(-1).error.code, 'PROFILE_STILL_EXISTS');
+    await passed('profile-remains-rejected', result);
+  } finally {await fs.rm(p, {recursive: true, force: true});}
+});
+
+test('a rejected absence inspection cannot be treated as ENOENT confirmation', async () => {
+  const result = await cleanupProfile({profile: profile(), inspect: async () => {
+    throw Object.assign(Error('INJECTED PROFILE INSPECTION DENIAL'), {code: 'EACCES'});
+  }});
+  assert.equal(result.status, 'failed'); assert.equal(result.verification.absent, null);
+  assert.equal(result.stages.at(-1).error.code, 'EACCES'); await passed('profile-inspection-denial', result);
 });
 
 test.after(async () => {
