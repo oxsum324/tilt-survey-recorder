@@ -16,7 +16,8 @@
     "test:trace-completion": "node --test tests/trace-completion.test.mjs",
     "test:reliability": "node --test tests/reliability.test.mjs",
     "test:evidence-io": "node --test tests/evidence-io.test.mjs",
-    "test:publication": "node --test tests/publication-diagnostics.test.mjs"
+    "test:publication": "node --test tests/publication-diagnostics.test.mjs",
+    "test:teardown": "node --test tests/staged-teardown.test.mjs"
   },
   "devDependencies": {
     "playwright": "1.58.2"

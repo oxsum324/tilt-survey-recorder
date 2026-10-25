@@ -93,6 +93,10 @@ jobs:
         id: publication
         if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name publication -Executable npm.cmd -Arguments @('run', 'test:publication'); exit $LASTEXITCODE
+      - name: Regress staged teardown isolation and complete diagnostic fallback
+        id: teardown
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name teardown -Executable npm.cmd -Arguments @('run', 'test:teardown'); exit $LASTEXITCODE
       - name: Data tests (92)
         id: data
         if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}

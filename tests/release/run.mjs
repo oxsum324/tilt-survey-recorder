@@ -3,6 +3,7 @@ import path from 'node:path';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createHash,randomUUID} from 'node:crypto';
+import {readPublishedResult} from './evidence-io.mjs';
 import {runCaptured} from './command.mjs';
 import {loadSites,assertRevisionChanged} from './site.mjs';
 import {runMapNegative} from './map-negative.mjs';
@@ -26,10 +27,11 @@ try{
   const execution=await runCaptured({root:path.join(root,'commands'),name,executable:process.execPath,
    args:[basic?'tests/release/basic-child.mjs':'tests/release/upgrade-child.mjs',out,channel,mode],
    resultFile:mode==='basic'||mode==='upgrade'?path.join(out,'results.json'):null,
+   requirePublication:mode==='upgrade',
    expectedChecks:mode==='basic'?16:mode==='upgrade'?5:null});
   assert.equal(execution.watchdogTriggered,false);assert.equal(execution.signal,null);
   const negative=['stale','initial-console'].includes(mode);assert.equal(execution.rawExitCode,negative?1:0);assert.equal(execution.exitCode,negative?1:0);
-  const result=await read(path.join(out,'results.json'));assert.equal(result.status,negative?'failed':'passed');
+  const result=(await readPublishedResult(path.join(out,'results.json'),{execution,requirePublication:mode==='upgrade'})).value;assert.equal(result.status,negative?'failed':'passed');
   if(negative){
    const scenario=basic?'basic':'upgrade',folder=path.join(out,'diagnostics',scenario),record=await read(path.join(folder,'failure.json'));
    assert.deepEqual(record.captureErrors,[]);assert.equal(record.pageClosedAtFailure,false);assert.equal(record.artifactAttempts.length,4);assert.ok(record.artifactAttempts.every(a=>a.status==='saved'));

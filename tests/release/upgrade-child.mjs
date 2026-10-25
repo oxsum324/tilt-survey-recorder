@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
 import {loadSites,siteServer,sha,assertRevisionChanged} from './site.mjs';
 import {monitorContext,assertOfflineRecovery} from '../desktop/diagnostics.mjs';
-import {withFailureEvidence,closeAfterEvidence} from '../browser-failure-evidence.mjs';
+import {withFailureEvidence} from '../browser-failure-evidence.mjs';
 import {assertSvgMapVisible,injectSvgMapFault} from './svg-map.mjs';
+import {finalizeStaged} from './staged-finalize.mjs';
 import {syntheticImages} from './synthetic-images.mjs';
 const [out,channel,mode]=process.argv.slice(2);await fs.mkdir(out,{recursive:true});
 const sites=await loadSites();assertRevisionChanged(sites.old,sites.current);
@@ -22,6 +23,7 @@ const snapshot=()=>page.evaluate(async()=>{
  return {project,media,fingerprint:await projectFingerprint(project,loadMedia)};
 });
 const runtime=()=>page.evaluate(async()=>{const result={};for(const name of ['app.js','style.css']){const r=await fetch('./'+name);result[name]=[...new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer()))].map(x=>x.toString(16).padStart(2,'0')).join('');}return result;});
+let originalError;
 try{
  await save();
  await withFailureEvidence({context,page,root:path.join(out,'diagnostics'),name:'upgrade'},async()=>{
@@ -79,8 +81,8 @@ try{
   pass('strict-startup-through-offline-diagnostics',assertOfflineRecovery(diagnostics,{url:offlineUrl,workerUrl:server.url+'sw.js',readVerified:true}));
  });
  record.status='passed';record.browserVersion=browser.version();
-}catch(error){record.status='failed';record.error={name:error.name,message:error.message,stack:error.stack};console.error(error.stack);process.exitCode=1;}
+}catch(error){originalError=error;record.status='failed';record.error={name:error.name,message:error.message,stack:error.stack};console.error(error.stack);process.exitCode=1;}
 finally{
- await context.setOffline(false).catch(()=>{});await closeAfterEvidence(context);await closeAfterEvidence(browser);await server.close();
- record.endedUtc=new Date().toISOString();await save();
+ const final=await finalizeStaged({record,originalError,browser,server,out});
+ if(final.failed)process.exitCode=1;
 }
