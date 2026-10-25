@@ -1189,7 +1189,7 @@ new ResizeObserver(([entry]) =>
 ).observe($(".app-header"));
 window.addEventListener("pagehide", () => {
   clearTimeout(saveTimer);
-  if (project && !replacing) queueSave();
+  if (project && !replacing && document.documentElement.dataset.saveState === "pending") queueSave();
 });
 let swReload = false,
   updateRequested = false,
@@ -1254,7 +1254,7 @@ window.addEventListener("offline", () => {
 try {
   const saved = await loadProject();
   project = saved ? normalizeProject(saved) : createProject();
-  if (!saved || saved.appVersion !== project.appVersion) await saveProject(project);
+  if (!saved) await saveProject(project);
 } catch (e) {
   project ||= createProject();
   failedSave = true;

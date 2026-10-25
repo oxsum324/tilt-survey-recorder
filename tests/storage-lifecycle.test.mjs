@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';import fs from 'node:fs/promises';import vm from 'node:vm';
 import {sampleProject,createProject} from '../model.js';
 import {normalizeProject} from '../store.js';
-const source=await fs.readFile(new URL('../app.js',import.meta.url),'utf8');
+const source=(await fs.readFile(new URL('../app.js',import.meta.url),'utf8')).replaceAll('\r\n','\n');
 const queue=source.slice(source.indexOf('function queueSave()'),source.indexOf('function dialog('));
 const adopt=source.slice(source.indexOf('async function adopt('),source.indexOf('async function action('));
 function harness(replaceProject){const current=sampleProject(),incoming=sampleProject();current.id='old-case';incoming.id='new-case';const writes=[];const context=vm.createContext({structuredClone,Date,project:current,incoming,replacing:false,saveTimer:null,saving:Promise.resolve(),storageBlocked:false,failedSave:false,reportKind:'all',selectedPair:null,selectedFacade:null,reportStale:false,workspace:{inert:false},desktopActions:{inert:false},document:{documentElement:{dataset:{}}},clearTimeout(){},setTimeout(){return 1;},invalidateShare(){},updateStatus(){},render(){},notice(){},async replaceProject(value,media,previous){assert.equal(previous.id,'old-case');await replaceProject(value);writes.push('replace:'+value.id);},async saveProject(value){writes.push('save:'+value.id);}});vm.runInContext(queue+'\n'+adopt,context);return {context,writes};}
@@ -10,6 +10,7 @@ test('failed conflicting adoption retains old draft and restores controls withou
 
 
 const startup=source.slice(source.lastIndexOf('try {\n  const saved = await loadProject();'),source.lastIndexOf('selectedPair = project.pairs[0]?.id;'));
+assert.ok(startup.startsWith('try {'),'Production startup must be included in the harness');
 async function start(saved){
  const writes=[],context=vm.createContext({project:undefined,failedSave:false,storageBlocked:false,async loadProject(){return saved;},normalizeProject,createProject,async saveProject(value){writes.push(structuredClone(value));},notice(){}});
  await vm.runInContext('(async()=>{'+startup+'})()',context);

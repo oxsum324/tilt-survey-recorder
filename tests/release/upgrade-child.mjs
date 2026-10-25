@@ -63,7 +63,7 @@ try{
   // The unchanged-worker mutant must fail this exact release invariant, not a timeout.
   assert.equal(actual['app.js'],sha(sites.current.get('app.js')),'runtime app.js must match new deployment');
   assert.equal(actual['style.css'],sha(sites.current.get('style.css')),'runtime style.css must match new deployment');
-  const after=await snapshot();assert.deepEqual(after,{...before,project:{...before.project,appVersion:sites.manifest.version}},'Entire project, confirmation/audit fields and both media blobs must survive');
+  const after=await snapshot();assert.deepEqual(after,before,'Entire project, confirmation/audit fields and both media blobs must survive');
   await fs.writeFile(path.join(out,'after.json'),JSON.stringify(after,null,2));
   pass('upgrade-loads-new-runtime-and-retains-all-evidence',{actual,fingerprint:after.fingerprint,media:after.media});
   const keys=await page.evaluate(()=>caches.keys()),key=sites.current.get('sw.js').toString().match(/const CACHE='([^']+)'/)[1];
@@ -71,7 +71,7 @@ try{
   pass('new-complete-shell-active-old-cache-retired',{keys});
   phase='offline';const offlineUrl=server.url+'?upgrade-offline='+channel;
   await context.setOffline(true);await page.goto(offlineUrl);await field('header.caseNumber').waitFor();
-  const offline=await snapshot();assert.deepEqual(offline,{...before,project:{...before.project,appVersion:sites.manifest.version}});await fs.writeFile(path.join(out,'offline.json'),JSON.stringify(offline,null,2));
+  const offline=await snapshot();assert.deepEqual(offline,before);await fs.writeFile(path.join(out,'offline.json'),JSON.stringify(offline,null,2));
   await tab('photos');await page.locator('#annotationStage img').waitFor();await page.waitForFunction(()=>[...document.querySelectorAll('#annotationStage img')].every(i=>i.complete&&i.naturalWidth>0));
   await tab('map');await page.locator('#planStage svg').waitFor();await page.waitForFunction(()=>[...document.querySelectorAll('#planStage img')].every(i=>i.complete&&i.naturalWidth>0));
   await injectSvgMapFault(page,mode);
