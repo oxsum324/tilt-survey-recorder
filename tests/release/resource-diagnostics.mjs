@@ -18,9 +18,9 @@ export function instrumentTraceNative(context) {
     for (const listener of listeners) {try {listener(event);} catch {}}
   };
   context.tracing.stop = async options => {
-    const started = performance.now(); emit('native-stop-entered', {boundary: 'captured Playwright public API'});
-    try {const value = await original(options); emit('native-stop-resolved', {nativeElapsedMs: performance.now() - started}); return value;}
-    catch (error) {emit('native-stop-rejected', {nativeElapsedMs: performance.now() - started, error: {name: error.name, message: error.message}}); throw error;}
+    const started = performance.now(); emit('playwright-stop-entered', {boundary: 'captured Playwright public API before fixture wrapper'});
+    try {const value = await original(options); emit('playwright-stop-resolved', {nativeElapsedMs: performance.now() - started}); return value;}
+    catch (error) {emit('playwright-stop-rejected', {nativeElapsedMs: performance.now() - started, error: {name: error.name, message: error.message}}); throw error;}
   };
   const observer = {events, note: emit, subscribe: listener => {listeners.add(listener); return () => listeners.delete(listener);}};
   context.tracing[traceKey] = observer; return observer;

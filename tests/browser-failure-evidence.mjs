@@ -101,11 +101,13 @@ export async function withFailureEvidence({context, page, name, root = failureEv
       traceStage('stop-requested');
       traceStop = Promise.resolve().then(() => {
         traceStage('stop-api-entered');
+        traceStage('native-stop-entered', {legacyName: true, boundary: 'legacy stop wrapper entry; actual original API uses playwright-stop-entered'});
         return context.tracing.stop({path: tracePending});
       }).then(() => {
         tracing = false; record.traceStop.status = 'completed';
         record.traceStop.finishedUtc = new Date().toISOString();
         traceStage('stop-api-resolved');
+        traceStage('native-stop-resolved', {legacyName: true, boundary: 'legacy stop wrapper resolution'});
       }, error => {
         record.traceStop.status = 'failed'; record.traceStop.error = errorRecord(error);
         record.traceStop.finishedUtc = new Date().toISOString(); traceStage('stop-api-rejected', {error: errorRecord(error)}); throw error;

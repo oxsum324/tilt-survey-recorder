@@ -139,5 +139,7 @@ stdout輸出`TILT_EVIDENCE_PUBLISHED`確認。父程序還必須核對原生exit
 實際合成profile刪除與原錯誤保留；另驗證正常exit0、缺確認、錯token、內容變更及未封套JSON。
 trace在注入延遲前先包住原始Playwright公開API，分列fixture延遲、stop API入口及原生API
 進入／完成／拒絕；仍無法觀察Playwright內部壓縮或下載。原2250ms注入及全部期限不變。
+既有`native-stop-entered`保留為明標legacy的包裝入口，以維持原斷言；真正原始API邊界
+使用`playwright-stop-entered/resolved/rejected`，不能把legacy或fixture等待計為原生匯出時間。
 seed／basic關閉另存有界限診斷，包含真實close狀態、等待及原生耗時；設定檔清理亦分列
 共用預算剩餘、原生操作與等待結果。晚到操作不改封存收據，診斷保存失敗不取代原錯誤。

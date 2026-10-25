@@ -77,7 +77,7 @@ test('native trace boundary excludes a fixture delay placed before the original 
   const observer = instrumentTraceNative(context), actual = context.tracing.stop.bind(context.tracing), start = performance.now();
   context.tracing.stop = async options => {observer.note('fixture-delay-entered'); await new Promise(r => setTimeout(r, 60)); observer.note('fixture-delay-resolved'); return actual(options);};
   assert.equal(instrumentTraceNative(context), observer); await context.tracing.stop({});
-  assert.deepEqual(observer.events.map(e => e.stage), ['fixture-delay-entered', 'fixture-delay-resolved', 'native-stop-entered', 'native-stop-resolved']);
+  assert.deepEqual(observer.events.map(e => e.stage), ['fixture-delay-entered', 'fixture-delay-resolved', 'playwright-stop-entered', 'playwright-stop-resolved']);
   assert.ok(observer.events[2].monotonicMs - start >= 50);
   assert.ok(observer.events[3].nativeElapsedMs < observer.events[3].monotonicMs - start);
   await passed('native-trace-boundary', {events: observer.events, scope: 'unit injection; not real Playwright internals'});
@@ -86,7 +86,7 @@ test('native trace boundary excludes a fixture delay placed before the original 
 test('native trace rejection keeps the exact error and records the original API stage', async () => {
   const original = Error('ORIGINAL NATIVE TRACE ERROR'), context = {tracing: {stop: async () => {throw original;}}};
   const observer = instrumentTraceNative(context); await assert.rejects(context.tracing.stop({}), error => error === original);
-  assert.deepEqual(observer.events.map(e => e.stage), ['native-stop-entered', 'native-stop-rejected']);
+  assert.deepEqual(observer.events.map(e => e.stage), ['playwright-stop-entered', 'playwright-stop-rejected']);
   await passed('native-trace-rejection', {events: observer.events});
 });
 
