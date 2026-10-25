@@ -1,17 +1,25 @@
 {
   "name": "tilt-survey-recorder",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test calc.test.js sketch.test.js store.test.js media.test.js sw.test.js language.test.js integrity.test.js migration.test.js",
+    "test": "node --test calc.test.js sketch.test.js store.test.js media.test.js sw.test.js language.test.js integrity.test.js migration.test.js storage-integrity-regression.test.js v050-calculation.test.js",
     "test:browser": "node tests/browser.mjs && node tests/media-browser.mjs && node tests/display-browser.mjs && node tests/upgrade-browser.mjs && node tests/network-browser.mjs && node tests/integrity-browser.mjs && node tests/mode-browser.mjs && node tests/mobile-layout-browser.mjs && node tests/review-followups-browser.mjs",
     "start": "node serve.mjs",
     "test:desktop": "node tests/desktop/run-local.mjs",
     "test:ci-evidence": "node tests/ci/evidence-regression.mjs",
     "test:workflow": "node tests/ci/workflow-semantics.mjs",
     "test:browser-evidence": "node --test tests/browser-failure-evidence.test.mjs",
-    "test:release": "node --test tests/release/command.test.mjs && node tests/release/run.mjs"
+    "test:release": "node --test tests/release/command.test.mjs && node tests/release/run.mjs",
+    "test:live": "node tests/release/live-run.mjs",
+    "test:trace-completion": "node --test tests/trace-completion.test.mjs",
+    "test:reliability": "node --test tests/reliability.test.mjs",
+    "test:evidence-io": "node --test tests/evidence-io.test.mjs",
+    "test:publication": "node --test tests/publication-diagnostics.test.mjs",
+    "test:teardown": "node --test tests/staged-teardown.test.mjs",
+    "test:close-lifecycle": "node --test tests/close-lifecycle.test.mjs",
+    "test:storage": "node --test tests/storage-session.test.mjs tests/storage-lifecycle.test.mjs"
   },
   "devDependencies": {
     "playwright": "1.58.2"

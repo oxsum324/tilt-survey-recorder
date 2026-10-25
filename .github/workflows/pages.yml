@@ -65,27 +65,72 @@ jobs:
       - name: Install verified Traditional Chinese font for PDF checks
         id: font_install
         run: ./tests/ci/run-command.ps1 -Name font_install -Executable ./tests/desktop/install-ci-font.ps1; exit $LASTEXITCODE
+      # Independent test failures remain failures; run later suites for complete evidence.
+      # Every failed step still fails checks; publication gates remain unchanged.
       - name: Regress capture of browser failures before page cleanup
         id: browser_diagnostic_regressions
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name browser_diagnostic_regressions -Executable npm.cmd -Arguments @('run', 'test:browser-evidence'); exit $LASTEXITCODE
       - name: Regress CI evidence failure scenarios
+        # Trace completion regressions are separate from the fourteen existing diagnostics.
         id: ci_regressions
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name ci_regressions -Executable npm.cmd -Arguments @('run', 'test:ci-evidence'); exit $LASTEXITCODE
-      - name: Data tests (92)
+      - name: Regress single trace export deadlines and execution provenance
+        id: trace_completion
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name trace_completion -Executable npm.cmd -Arguments @('run', 'test:trace-completion'); exit $LASTEXITCODE
+      - name: Regress export diagnostics, offline worker update boundary and bounded profile cleanup
+        id: reliability
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name reliability -Executable npm.cmd -Arguments @('run', 'test:reliability'); exit $LASTEXITCODE
+      - name: Regress isolated final receipt and worker observer write failures
+        id: evidence_io
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name evidence_io -Executable npm.cmd -Arguments @('run', 'test:evidence-io'); exit $LASTEXITCODE
+      - name: Regress late rename publication and native resource diagnostics
+        # Retain the original diagnostics and assertion suites.
+        id: publication
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name publication -Executable npm.cmd -Arguments @('run', 'test:publication'); exit $LASTEXITCODE
+      - name: Regress staged teardown isolation and complete diagnostic fallback
+        id: teardown
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name teardown -Executable npm.cmd -Arguments @('run', 'test:teardown'); exit $LASTEXITCODE
+      - name: Regress first-close ownership and expected-failure cleanup acceptance
+        id: close_lifecycle
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name close_lifecycle -Executable npm.cmd -Arguments @('run', 'test:close-lifecycle'); exit $LASTEXITCODE
+      - name: Data tests including case-integrity regressions
         id: data
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name data -Executable npm.cmd -Arguments @('test'); exit $LASTEXITCODE
+      - name: Reject stale case writes with real Chrome IndexedDB
+        id: storage_sessions
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
+        run: ./tests/ci/run-command.ps1 -Name storage_sessions -Executable npm.cmd -Arguments @('run', 'test:storage'); exit $LASTEXITCODE
       - name: Existing browser tests (101)
         id: browser
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name browser -Executable npm.cmd -Arguments @('run', 'test:browser'); exit $LASTEXITCODE
       - name: Build local site at the tested commit
         id: site_build
+        if: ${{ !cancelled() && steps.font_install.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name site_build -Executable node -Arguments @('build-site.mjs'); exit $LASTEXITCODE
       - name: Regress old V0.4.2 upgrades and first-navigation evidence
         id: release_regressions
+        if: ${{ !cancelled() && steps.site_build.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name release_regressions -Executable npm.cmd -Arguments @('run', 'test:release'); exit $LASTEXITCODE
       - name: Chrome and Edge desktop matrix (8 scenarios, 80 grouped checks)
+        # Publication checks execute before deploy on main; live verification is a branch/PR check.
+        # Record actual published main separately from the candidate source under test.
         id: desktop
+        if: ${{ !cancelled() && steps.site_build.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name desktop -Executable npm.cmd -Arguments @('run', 'test:desktop', '--', 'ci-${{ github.run_id }}-${{ github.run_attempt }}'); exit $LASTEXITCODE
+      - name: Verify published main SVG maps and basic functions without deployment
+        if: github.ref != 'refs/heads/main' && !cancelled() && steps.font_install.outcome == 'success'
+        id: live_release
+        run: ./tests/ci/run-command.ps1 -Name live_release -Executable npm.cmd -Arguments @('run', 'test:live'); exit $LASTEXITCODE
       - name: Finalize evidence even when checkout or setup failed
         id: evidence_finish
         if: always()

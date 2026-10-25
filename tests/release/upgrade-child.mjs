@@ -4,7 +4,10 @@ import assert from 'node:assert/strict';
 import {chromium} from 'playwright';
 import {loadSites,siteServer,sha,assertRevisionChanged} from './site.mjs';
 import {monitorContext,assertOfflineRecovery} from '../desktop/diagnostics.mjs';
-import {withFailureEvidence,closeAfterEvidence} from '../browser-failure-evidence.mjs';
+import {withFailureEvidence} from '../browser-failure-evidence.mjs';
+import {assertSvgMapVisible,injectSvgMapFault} from './svg-map.mjs';
+import {finalizeStaged} from './staged-finalize.mjs';
+import {syntheticImages} from './synthetic-images.mjs';
 const [out,channel,mode]=process.argv.slice(2);await fs.mkdir(out,{recursive:true});
 const sites=await loadSites();assertRevisionChanged(sites.old,sites.current);
 const server=await siteServer(sites,{oldFirst:true,staleWorker:mode==='stale'});
@@ -20,6 +23,7 @@ const snapshot=()=>page.evaluate(async()=>{
  return {project,media,fingerprint:await projectFingerprint(project,loadMedia)};
 });
 const runtime=()=>page.evaluate(async()=>{const result={};for(const name of ['app.js','style.css']){const r=await fetch('./'+name);result[name]=[...new Uint8Array(await crypto.subtle.digest('SHA-256',await r.arrayBuffer()))].map(x=>x.toString(16).padStart(2,'0')).join('');}return result;});
+let originalError;
 try{
  await save();
  await withFailureEvidence({context,page,root:path.join(out,'diagnostics'),name:'upgrade'},async()=>{
@@ -29,7 +33,7 @@ try{
   await page.getByText('合成示例已載入，可直接預覽成果表。',{exact:true}).waitFor();
   await field('header.caseNumber').fill('舊V0.4.2升級－合成－'+channel);
   await page.waitForFunction(()=>document.documentElement.dataset.saveState==='saved');
-  const images=await page.evaluate(()=>{const make=(color,w,h)=>{const c=document.createElement('canvas');c.width=w;c.height=h;const ctx=c.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,w,h);ctx.fillStyle='#000';ctx.fillText('SYNTHETIC',4,18);return c.toDataURL('image/png').split(',')[1];};return {photo:make('#c7e5dd',240,160),map:make('#eee5ca',320,200)};});
+   const images=await page.evaluate(syntheticImages);
   await fs.writeFile(path.join(out,'source-photo.png'),Buffer.from(images.photo,'base64'));await fs.writeFile(path.join(out,'source-map.png'),Buffer.from(images.map,'base64'));
   await tab('photos');await page.locator('#photoImport').setInputFiles({name:'synthetic-photo.png',mimeType:'image/png',buffer:Buffer.from(images.photo,'base64')});
   await page.locator('#annotationStage svg').waitFor();await page.waitForFunction(()=>document.documentElement.dataset.saveState==='saved');
@@ -47,7 +51,7 @@ try{
   assert.equal(oldRuntime['app.js'],sha(sites.old.get('app.js')));assert.equal(oldRuntime['style.css'],sha(sites.old.get('style.css')));
   await fs.writeFile(path.join(out,'before.json'),JSON.stringify(before,null,2));await page.screenshot({path:path.join(out,'before.png')});
   pass('pinned-old-v042-with-case-photo-map',{oldRuntime,media:before.media,fingerprint:before.fingerprint});
-  const timeOrigin=await page.evaluate(()=>performance.timeOrigin);server.deploy();
+  const timeOrigin=await page.evaluate(()=>performance.timeOrigin);await server.deploy();
   await page.evaluate(async()=>await(await navigator.serviceWorker.getRegistration()).update());
   if(mode!=='stale'){
    await page.locator('#updateButton').waitFor({state:'visible'});
@@ -67,16 +71,18 @@ try{
   pass('new-complete-shell-active-old-cache-retired',{keys});
   phase='offline';const offlineUrl=server.url+'?upgrade-offline='+channel;
   await context.setOffline(true);await page.goto(offlineUrl);await field('header.caseNumber').waitFor();
-  const offline=await snapshot();assert.deepEqual(offline,before);
+  const offline=await snapshot();assert.deepEqual(offline,before);await fs.writeFile(path.join(out,'offline.json'),JSON.stringify(offline,null,2));
   await tab('photos');await page.locator('#annotationStage img').waitFor();await page.waitForFunction(()=>[...document.querySelectorAll('#annotationStage img')].every(i=>i.complete&&i.naturalWidth>0));
   await tab('map');await page.locator('#planStage svg').waitFor();await page.waitForFunction(()=>[...document.querySelectorAll('#planStage img')].every(i=>i.complete&&i.naturalWidth>0));
+  await injectSvgMapFault(page,mode);
+  record.svgMap=await assertSvgMapVisible(page,out,{mediaId:before.project.map.mediaId,sha256:sources[1].sha256,width:before.project.map.width,height:before.project.map.height});
   await page.screenshot({path:path.join(out,'offline-map.png')});await context.setOffline(false);phase='online';
   pass('offline-project-photo-and-map-retained',{fingerprint:offline.fingerprint});
   pass('strict-startup-through-offline-diagnostics',assertOfflineRecovery(diagnostics,{url:offlineUrl,workerUrl:server.url+'sw.js',readVerified:true}));
  });
  record.status='passed';record.browserVersion=browser.version();
-}catch(error){record.status='failed';record.error={name:error.name,message:error.message,stack:error.stack};console.error(error.stack);process.exitCode=1;}
+}catch(error){originalError=error;record.status='failed';record.error={name:error.name,message:error.message,stack:error.stack};console.error(error.stack);process.exitCode=1;}
 finally{
- await context.setOffline(false).catch(()=>{});await closeAfterEvidence(context);await closeAfterEvidence(browser);await server.close();
- record.endedUtc=new Date().toISOString();await save();
+ const final=await finalizeStaged({record,originalError,browser,server,out});
+ if(final.failed)process.exitCode=1;
 }

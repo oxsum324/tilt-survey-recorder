@@ -4,6 +4,7 @@ import path from 'node:path';
 import {spawn, execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
+import {executionOrigin} from '../execution-origin.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const workflow = (await fs.readFile(path.join(repo, '.github/workflows/pages.yml'), 'utf8')).replaceAll('\r\n', '\n');
@@ -56,6 +57,14 @@ assert.match(step('release_regressions'), /run-command\.ps1 -Name release_regres
 assert.match(step('release_regressions'), /test:release/);
 assert.ok(ids.indexOf('release_regressions') > ids.indexOf('site_build'));
 assert.ok(ids.indexOf('release_regressions') < ids.indexOf('desktop'));
+assert.match(step('live_release'), /run-command\.ps1 -Name live_release/);
+assert.match(step('live_release'), /test:live/);
+assert.match(step('live_release'), /if: github\.ref != 'refs\/heads\/main'/);
+assert.ok(ids.indexOf('live_release') < ids.indexOf('evidence_finish'));
+assert.match(step('trace_completion'), /run-command\.ps1 -Name trace_completion/);
+assert.match(step('trace_completion'), /test:trace-completion/);
+assert.ok(ids.indexOf('trace_completion') > ids.indexOf('browser_diagnostic_regressions'));
+assert.ok(ids.indexOf('trace_completion') < ids.indexOf('browser'));
 assert.match(workflow, /needs: checks/);
 assert.equal((workflow.match(/if: github\.ref == 'refs\/heads\/main' && github\.event_name != 'pull_request'/g) || []).length, 2);
 
@@ -190,9 +199,9 @@ try {
     results.push({name: test.name, status: 'pass', injectedFailure: Boolean(test.fail || test.action || test.missing),
       expectedFailedStep: test.fail || test.action || (test.missing ? 'npm_install' : null),
       sha256Entries: manifest.length, archiveSha256: digest(await fs.readFile(zip)),
-      evidenceScope: 'local-fault-injection; not a cloud CI execution'});
+      ...executionOrigin(), evidenceScope: 'synthetic subprocess setup failures; not actual CI setup failure'});
     console.log(`PASS CI evidence: ${test.name}`);
-    await fs.writeFile(path.join(out, 'results.json'), JSON.stringify({head, scope: 'local-fault-injection', cases: results}, null, 2));
+    await fs.writeFile(path.join(out, 'results.json'), JSON.stringify({head, ...executionOrigin(), targetScope: 'synthetic subprocess setup failures', cases: results}, null, 2));
   }
   assert.equal(results.length, 11);
 } finally {
@@ -208,4 +217,4 @@ try {
   await fs.writeFile(path.join(out, 'sha256.json'), JSON.stringify(files, null, 2));
 }
 console.log(JSON.stringify({cases: results.length, passed: results.length, head, evidence: out,
-  scope: 'local-fault-injection; not a cloud CI execution'}));
+  ...executionOrigin(), targetScope: 'synthetic subprocess setup failures'}));

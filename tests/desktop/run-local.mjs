@@ -1,3 +1,4 @@
+import {VERSION} from '../../model.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import http from 'node:http';
@@ -5,6 +6,7 @@ import {spawn, execFileSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
+import {executionOrigin} from '../execution-origin.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(root, '../..');
@@ -50,7 +52,7 @@ const server = http.createServer(async (req, res) => {
   }
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-const url = `http://127.0.0.1:${server.address().port}/?release=0.4.2`;
+const url = `http://127.0.0.1:${server.address().port}/?release=${VERSION}`;
 const python = process.env.TILT_TEST_PYTHON || 'python';
 const env = {...process.env, TILT_TEST_URL: url, TILT_TEST_HEAD: head,
   TILT_DESKTOP_RUN_DIR: runDir, TILT_DESKTOP_EVIDENCE_DIR: out,
@@ -64,7 +66,7 @@ const commands = [
     path.join(out, 'chrome-1280-normal/print-preview.pdf')]],
 ];
 const receipt = {head, branch: git('branch', '--show-current'), url,
-  scope: 'Local staged branch only; not a live-site deployment verification',
+  ...executionOrigin(), targetScope: 'staged branch only; not a live-site deployment verification',
   startedUtc: new Date().toISOString(), node: process.version, python,
   sourceBefore, executions: []};
 const save = () => fs.writeFile(path.join(runDir, 'execution.json'), JSON.stringify(receipt, null, 2));

@@ -2,6 +2,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
+import {executionOrigin} from './execution-origin.mjs';
+import {instrumentTraceNative, resourceState} from './release/resource-diagnostics.mjs';
 
 const run = `${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}-${randomUUID()}`;
 export const failureEvidenceRoot = path.resolve(process.env.TILT_BROWSER_FAILURE_ROOT ||
@@ -13,6 +15,7 @@ const json = (file, value) => fs.writeFile(file, JSON.stringify(value, null, 2))
 export const capturePolicy = Object.freeze({artifactMs: 2000, totalMs: 12000, cleanupMs: 2000});
 const closing = new WeakMap();
 const alreadyFailed = new WeakSet();
+export const closeDiagnostics = resource => structuredClone(closing.get(resource)?.diagnostic || null);
 const timed = async (label, operation, timeoutMs) => {
   let timer;
   const timeout = () => Object.assign(new Error(`${label}: diagnostic deadline ${timeoutMs}ms exceeded`),
@@ -25,17 +28,30 @@ const timed = async (label, operation, timeoutMs) => {
   } finally { clearTimeout(timer); }
 };
 
+export function closeOnce(resource) {
+  if (!closing.has(resource)) {
+    const start = performance.now(), diagnostic = {requestedUtc: new Date().toISOString(), before: resourceState(resource), nativeStatus: 'queued', waitFailures: []};
+    const late = () => {if (diagnostic.waitFailures.length) {try {console.error('Late browser close settlement: ' + JSON.stringify(diagnostic));} catch {}}};
+    const promise = Promise.resolve().then(() => {diagnostic.nativeStatus = 'running'; diagnostic.enteredUtc = new Date().toISOString(); return resource.close();}).then(value => {
+      diagnostic.nativeStatus = 'completed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.after = resourceState(resource); late(); return value;
+    }, error => {diagnostic.nativeStatus = 'failed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.error = errorRecord(error); late(); throw error;});
+    closing.set(resource, {promise, diagnostic});
+  }
+  return closing.get(resource).promise;
+}
+
 // A failed cleanup must not replace an exception already being rethrown by the guard.
 export async function closeAfterEvidence(resource, timeoutMs = capturePolicy.cleanupMs) {
   const started = Date.now();
   try {
-    if (!closing.has(resource)) closing.set(resource, Promise.resolve().then(() => resource.close()));
-    await timed('diagnostic cleanup', () => closing.get(resource), timeoutMs);
-    return {status: 'closed', elapsedMs: Date.now() - started};
+    await timed('diagnostic cleanup', () => closeOnce(resource), timeoutMs);
+    return {status: 'closed', elapsedMs: Date.now() - started, diagnostic: closeDiagnostics(resource)};
   } catch (error) {
+    closing.get(resource)?.diagnostic.waitFailures.push({at: new Date().toISOString(), timeoutMs, waitElapsedMs: Date.now() - started, error: errorRecord(error)});
     console.error(`Browser diagnostic cleanup failure: ${error.stack || error}`);
+    console.error('Browser close diagnostic: ' + JSON.stringify({timeoutMs, waitElapsedMs: Date.now() - started, operation: closeDiagnostics(resource), stateAtTimeout: resourceState(resource)}));
     if (!alreadyFailed.has(resource)) throw error;
-    return {status: 'failed', elapsedMs: Date.now() - started, error: errorRecord(error)};
+    return {status: 'failed', elapsedMs: Date.now() - started, error: errorRecord(error), diagnostic: closeDiagnostics(resource)};
   }
 }
 
@@ -65,10 +81,47 @@ export async function withFailureEvidence({context, page, name, root = failureEv
   observe(context, 'response', response => ({url: response.url(), status: response.status(), fromServiceWorker: response.fromServiceWorker()}));
   observe(context, 'requestfailed', request => ({url: request.url(), method: request.method(),
     resourceType: request.resourceType(), serviceWorker: request.serviceWorker()?.url() || null, failure: request.failure()}));
-  const record = {schema: 1, scope: 'local-browser-diagnostics; not a GitHub cloud run',
+  const record = {schema: 1, ...executionOrigin(), targetScope: 'browser diagnostics; synthetic fixtures are labelled by their caller',
     head: execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim(), name,
     attachedUtc: new Date().toISOString(), status: 'running', captureErrors: [], policy};
   let tracing = false;
+  const tracePending = path.join(out, `pending-trace-${randomUUID()}.pending`);
+  const exportStarted = performance.now();
+  record.traceExport = {nativeInternals: 'opaque Playwright API; no inferred zip/download stage', stages: []};
+  const traceStage = (stage, extra = {}) => record.traceExport.stages.push({stage,
+    at: new Date().toISOString(), elapsedMs: performance.now() - exportStarted,
+    pageClosed: page.isClosed(), browserConnected: context.browser?.()?.isConnected?.() ?? null,
+    ...extra});
+  const nativeTrace = instrumentTraceNative(context);
+  const removeNativeTrace = nativeTrace.subscribe(event => traceStage(event.stage, {...event, elapsedMs: event.monotonicMs - exportStarted}));
+  observe(context, 'close', () => {traceStage('context-closed'); return {};});
+  if (context.browser?.()) observe(context.browser(), 'disconnected', () => {traceStage('browser-disconnected'); return {};});
+  let traceStop;
+  const stopTrace = () => {
+    // A deadline races the operation; it cannot cancel it. Reuse this exact promise
+    // during failure capture instead of stopping/discarding the same trace twice.
+    if (!traceStop) {
+      if (!tracing) throw new Error('Trace was not started');
+      record.traceStop = {calls: 1, status: 'running', startedUtc: new Date().toISOString(),
+        stagedFile: path.basename(tracePending)};
+      traceStage('stop-requested');
+      traceStop = Promise.resolve().then(() => {
+        traceStage('stop-api-entered');
+        traceStage('native-stop-entered', {legacyName: true, boundary: 'legacy stop wrapper entry; actual original API uses playwright-stop-entered'});
+        return context.tracing.stop({path: tracePending});
+      }).then(() => {
+        tracing = false; record.traceStop.status = 'completed';
+        record.traceStop.finishedUtc = new Date().toISOString();
+        traceStage('stop-api-resolved');
+        traceStage('native-stop-resolved', {legacyName: true, boundary: 'legacy stop wrapper resolution'});
+      }, error => {
+        record.traceStop.status = 'failed'; record.traceStop.error = errorRecord(error);
+        record.traceStop.finishedUtc = new Date().toISOString(); traceStage('stop-api-rejected', {error: errorRecord(error)});
+        traceStage('native-stop-rejected', {legacyName: true, boundary: 'legacy stop wrapper rejection', error: errorRecord(error)}); throw error;
+      });
+    }
+    return traceStop;
+  };
   const manifest = async () => {
     const files = [];
     for (const entry of await fs.readdir(out, {withFileTypes: true})) {
@@ -84,17 +137,21 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     await timed('tracing.start', () => context.tracing.start({screenshots: true, snapshots: true, sources: true}), policy.artifactMs);
     tracing = true;
     const value = await action();
-    await timed('tracing.stop', () => context.tracing.stop(), policy.artifactMs); // Successful cases keep event receipts, not a failure trace.
+    await timed('tracing.stop', stopTrace, policy.artifactMs);
     tracing = false;
     record.status = 'passed'; record.finishedUtc = new Date().toISOString();
     await json(path.join(out, 'events.json'), events);
     await json(path.join(out, 'result.json'), record);
     await manifest();
+    // Only after all successful receipts are written may the staged trace be discarded.
+    // A timed-out stop leaves its original bytes available to the failure path below.
+    await fs.rm(tracePending);
     return value;
   } catch (error) {
     alreadyFailed.add(context);
     if (context.browser?.()) alreadyFailed.add(context.browser());
     record.status = 'failed'; record.failedUtc = new Date().toISOString();
+    traceStage('guard-failed', {error: errorRecord(error)});
     record.originalError = errorRecord(error);
     record.pageClosedAtFailure = page.isClosed(); record.urlAtFailure = page.url();
     const started = performance.now(), until = started + policy.totalMs;
@@ -135,7 +192,6 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     try {
       await writeRecord('failure.json', record, 'initial');
       await writeRecord('events.json', events, 'initial');
-      const tracePending = path.join(out, `pending-trace-${randomUUID()}.pending`);
       await Promise.all([
       attempt('page-state.json', () => page.evaluate(() => ({url: location.href, title: document.title,
           readyState: document.readyState, caseNumber: [...document.querySelectorAll('[data-field="header.caseNumber"]')].map(e => ({
@@ -149,9 +205,11 @@ export async function withFailureEvidence({context, page, name, root = failureEv
       attempt('page.html', () => page.content()),
       attempt('screenshot.png', () => page.screenshot({fullPage: true, timeout: policy.artifactMs})),
       attempt('trace.zip', async () => {
-        if (!tracing) throw new Error('Trace was not started');
-        await context.tracing.stop({path: tracePending}); tracing = false;
-        return fs.readFile(tracePending);
+        traceStage('failure-capture-wait');
+        await stopTrace();
+        const bytes = await fs.readFile(tracePending);
+        traceStage('pending-read-completed', {bytes: bytes.length});
+        return bytes;
       }),
       ]);
       if (record.captureErrors.some(item => item.code === 'CAPTURE_TIMEOUT')) {
@@ -159,6 +217,14 @@ export async function withFailureEvidence({context, page, name, root = failureEv
       }
       record.finishedUtc = new Date().toISOString();
       record.captureElapsedMs = performance.now() - started;
+      // A file's presence is an observation, never proof that a ZIP finished exporting.
+      try {
+        const stat = await bounded('trace pending inspection', () => fs.stat(tracePending));
+        traceStage('capture-sealed', {pendingBytes: stat.size, pendingPresent: true});
+      } catch (failure) {
+        traceStage('capture-sealed', {pendingPresent: false, inspectionError: errorRecord(failure)});
+      }
+      await writeRecord('trace-export.json', record.traceExport, 'final');
       await writeRecord('failure.json', record, 'final');
       await writeRecord('events.json', events, 'final');
       await writeRecord('result.json', record, 'final');
@@ -170,6 +236,7 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     }
     throw error;
   } finally {
+    removeNativeTrace();
     for (const remove of listeners) remove();
   }
 }

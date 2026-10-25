@@ -7,6 +7,7 @@ import {createHash} from 'node:crypto';
 import {chromium} from 'playwright';
 import {EventEmitter} from 'node:events';
 import {withFailureEvidence, capturePolicy, closeAfterEvidence} from './browser-failure-evidence.mjs';
+import {executionOrigin} from './execution-origin.mjs';
 
 const root = path.resolve(process.env.TILT_BROWSER_REGRESSION_ROOT ||
   path.join('output/playwright/timeout-regressions', new Date().toISOString().replace(/[:.]/g, '-')));
@@ -16,7 +17,7 @@ const read = async file => JSON.parse(await fs.readFile(file, 'utf8'));
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const results = [];
 const save = () => fs.writeFile(path.join(root, 'results.json'), JSON.stringify({
-  scope: 'local injected failures; child exit 1 is required; not a cloud CI run', cases: results}, null, 2));
+  ...executionOrigin(), targetScope: 'synthetic injected failures; child exit 1 is required', cases: results}, null, 2));
 const injected = async (mode, channel) => {
   const channelRoot = path.join(root, channel || 'chromium');
   const chunks = [], child = spawn(process.execPath, ['tests/fixtures/browser-timeout-child.mjs', channelRoot, mode, channel || 'chromium'],
@@ -38,7 +39,8 @@ const injected = async (mode, channel) => {
   assert.equal(completion.exitCode, 1); assert.equal(completion.signal, null);
   const out = path.join(channelRoot, mode), record = await read(path.join(out,
     mode === 'first-receipt-write-failure' ? 'result.json' : 'failure.json'));
-  assert.equal(record.status, 'failed'); assert.match(record.scope, /not a GitHub cloud run/);
+  assert.equal(record.status, 'failed'); assert.equal(record.scope, executionOrigin().scope);
+  assert.deepEqual(record.execution, executionOrigin().execution);
   assert.equal((await read(path.join(out, 'child-observation.json'))).sameOriginalError, true);
   const manifest = await read(path.join(out, 'sha256.json'));
   for (const entry of manifest) {

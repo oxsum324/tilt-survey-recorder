@@ -4,6 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync, execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
+import {executionOrigin} from '../execution-origin.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url)), repo = path.resolve(root, '../..');
 const lock = JSON.parse(await fs.readFile(path.join(root, 'actionlint-version.json'), 'utf8'));
@@ -51,7 +52,7 @@ try {
   }
 } finally {
   await fs.writeFile(path.join(out, 'results.json'), JSON.stringify({head,
-    scope: 'local-static-workflow-validation; not a GitHub cloud run',
+    ...executionOrigin(), validationScope: 'static workflow semantic validation with rejection controls; not a dispatched workflow',
     tool: {...lock, executable, versionOutput: version.stdout.trim()},
     optionalExternalLinters: {shellcheck: false, pyflakes: false},
     ignoredWorkflowRules: [], cases: results}, null, 2));
@@ -64,4 +65,4 @@ try {
 }
 console.log(JSON.stringify({head, actualWorkflows: workflows.length, cases: results.length,
   passed: results.filter(r => r.status === 'pass').length,
-  scope: 'local-static-workflow-validation; not a GitHub cloud run', evidence: out}));
+  ...executionOrigin(), validationScope: 'static workflow semantic validation with rejection controls', evidence: out}));
