@@ -116,7 +116,7 @@ jobs:
         if: ${{ !cancelled() && steps.site_build.outcome == 'success' }}
         run: ./tests/ci/run-command.ps1 -Name desktop -Executable npm.cmd -Arguments @('run', 'test:desktop', '--', 'ci-${{ github.run_id }}-${{ github.run_attempt }}'); exit $LASTEXITCODE
       - name: Verify published main SVG maps and basic functions without deployment
-        if: ${{ !cancelled() && steps.font_install.outcome == 'success' && github.ref != 'refs/heads/main' }}
+        if: github.ref != 'refs/heads/main' && !cancelled() && steps.font_install.outcome == 'success'
         id: live_release
         run: ./tests/ci/run-command.ps1 -Name live_release -Executable npm.cmd -Arguments @('run', 'test:live'); exit $LASTEXITCODE
       - name: Finalize evidence even when checkout or setup failed
