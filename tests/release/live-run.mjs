@@ -6,6 +6,7 @@ import {randomUUID, createHash} from 'node:crypto';
 import {runCaptured} from './command.mjs';
 import {runMapNegative} from './map-negative.mjs';
 import {liveUrl} from './live-site.mjs';
+import {readPublishedResult} from './evidence-io.mjs';
 
 const harnessHead = execFileSync('git', ['rev-parse', 'HEAD'], {encoding: 'utf8'}).trim();
 const liveHead = execFileSync('git', ['ls-remote', 'origin', 'refs/heads/main'], {encoding: 'utf8'}).split(/\s/)[0];
@@ -22,10 +23,10 @@ try {
       const name = channel + '-' + mode, out = path.join(root, name);
       const execution = await runCaptured({root: path.join(root, 'commands'), name, executable: process.execPath,
         args: [mode === 'basic' ? 'tests/release/basic-child.mjs' : 'tests/release/live-upgrade.mjs', out, channel, mode, liveHead],
-        resultFile: path.join(out, 'results.json'), expectedChecks: mode === 'basic' ? 16 : 5});
+        resultFile: path.join(out, 'results.json'), expectedChecks: mode === 'basic' ? 16 : 5, requirePublication: mode === 'upgrade'});
       assert.equal(execution.rawExitCode, 0); assert.equal(execution.exitCode, 0);
       assert.equal(execution.watchdogTriggered, false); assert.equal(execution.signal, null);
-      const result = JSON.parse(await fs.readFile(path.join(out, 'results.json'), 'utf8'));
+      const {value: result} = await readPublishedResult(path.join(out, 'results.json'), {execution, requirePublication: mode === 'upgrade'});
       assert.equal(result.head, liveHead);
       if (mode === 'upgrade') assert.equal(result.svgMap.passed, true);
       await pass(name, {runtimeCommit: liveHead, checks: result.checks.length, nativeExitCode: 0});

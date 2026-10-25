@@ -2,17 +2,26 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import {chromium} from 'playwright';
 import {withFailureEvidence, closeAfterEvidence, capturePolicy} from '../browser-failure-evidence.mjs';
+import {instrumentTraceNative} from '../release/resource-diagnostics.mjs';
 
 const [root, mode, channel] = process.argv.slice(2);
 const browser = await chromium.launch({channel, headless: true});
 const context = await browser.newContext(), page = await context.newPage();
-const nativeStop = context.tracing.stop.bind(context.tracing);
+const nativeObservation = instrumentTraceNative(context), nativeStop = context.tracing.stop.bind(context.tracing);
 let calls = 0, completedAction = false;
 context.tracing.stop = async options => {
   calls++;
-  if (mode === 'late-before-native' || mode === 'failure-export-delay') await new Promise(resolve => setTimeout(resolve, 2250));
+  if (mode === 'late-before-native' || mode === 'failure-export-delay') {
+    nativeObservation.note('fixture-delay-entered', {placement: 'before-native', delayMs: 2250});
+    await new Promise(resolve => setTimeout(resolve, 2250));
+    nativeObservation.note('fixture-delay-resolved', {placement: 'before-native'});
+  }
   await nativeStop(options);
-  if (mode === 'late-after-save') await new Promise(resolve => setTimeout(resolve, 2250));
+  if (mode === 'late-after-save') {
+    nativeObservation.note('fixture-delay-entered', {placement: 'after-native', delayMs: 2250});
+    await new Promise(resolve => setTimeout(resolve, 2250));
+    nativeObservation.note('fixture-delay-resolved', {placement: 'after-native'});
+  }
 };
 const started = performance.now();
 try {
@@ -31,6 +40,7 @@ try {
     sameOriginalError: record.originalError.name === error.name && record.originalError.message === error.message && record.originalError.stack === error.stack,
     pageClosedAfterGuard: page.isClosed(), injectedDelayMs: 2250,
     injectionScope: 'test wrapper delay around real Playwright trace export; not an actual runner overload',
+    nativeObservation: structuredClone(nativeObservation.events),
   }, null, 2));
   throw error;
 } finally {await closeAfterEvidence(context); await closeAfterEvidence(browser);}

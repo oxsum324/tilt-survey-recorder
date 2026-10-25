@@ -4,10 +4,11 @@ import path from 'node:path';
 import {spawn} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import assert from 'node:assert/strict';
+import {readPublishedResult} from './evidence-io.mjs';
 
 // Native logs exist before spawn, including missing executables and semantic failures.
 export async function runCaptured({root,name,executable,args=[],cwd=process.cwd(),env=process.env,
-  resultFile=null,expectedChecks=null,timeoutMs=120000}) {
+  resultFile=null,expectedChecks=null,timeoutMs=120000,requirePublication=false}) {
   const out=path.join(root,name);await fs.mkdir(out,{recursive:false});
   const stdout=path.join(out,'stdout.log'),stderr=path.join(out,'stderr.log'),receipt=path.join(out,'execution.json');
   await fs.writeFile(stdout,'',{flag:'wx'});await fs.writeFile(stderr,'',{flag:'wx'});
@@ -31,7 +32,8 @@ export async function runCaptured({root,name,executable,args=[],cwd=process.cwd(
     record.exitCode=record.error||record.watchdogTriggered||completion.signal||completion.code!==0?1:0;
     if(record.exitCode===0&&resultFile){
       try {
-        const result=JSON.parse(await fs.readFile(resultFile,'utf8'));
+        const published=await readPublishedResult(resultFile,{execution:record,stdout:await fs.readFile(stdout,'utf8'),requirePublication});
+        const result=published.value;if(published.publication)record.resultPublication=published.publication;
         assert.equal(result.status,'passed','A zero native exit cannot override failed result JSON');
         if(expectedChecks!==null){assert.equal(result.checks.length,expectedChecks);assert.ok(result.checks.every(c=>c.status==='pass'));}
       }catch(error){record.exitCode=1;record.semanticError={name:error.name,message:error.message};appendFileSync(stderr,error.stack+'\n');}

@@ -3,6 +3,7 @@ import path from 'node:path';
 import {createHash, randomUUID} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {executionOrigin} from './execution-origin.mjs';
+import {instrumentTraceNative, resourceState} from './release/resource-diagnostics.mjs';
 
 const run = `${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}-${randomUUID()}`;
 export const failureEvidenceRoot = path.resolve(process.env.TILT_BROWSER_FAILURE_ROOT ||
@@ -14,6 +15,7 @@ const json = (file, value) => fs.writeFile(file, JSON.stringify(value, null, 2))
 export const capturePolicy = Object.freeze({artifactMs: 2000, totalMs: 12000, cleanupMs: 2000});
 const closing = new WeakMap();
 const alreadyFailed = new WeakSet();
+export const closeDiagnostics = resource => structuredClone(closing.get(resource)?.diagnostic || null);
 const timed = async (label, operation, timeoutMs) => {
   let timer;
   const timeout = () => Object.assign(new Error(`${label}: diagnostic deadline ${timeoutMs}ms exceeded`),
@@ -30,13 +32,20 @@ const timed = async (label, operation, timeoutMs) => {
 export async function closeAfterEvidence(resource, timeoutMs = capturePolicy.cleanupMs) {
   const started = Date.now();
   try {
-    if (!closing.has(resource)) closing.set(resource, Promise.resolve().then(() => resource.close()));
-    await timed('diagnostic cleanup', () => closing.get(resource), timeoutMs);
-    return {status: 'closed', elapsedMs: Date.now() - started};
+    if (!closing.has(resource)) {
+      const start = performance.now(), diagnostic = {requestedUtc: new Date().toISOString(), before: resourceState(resource), nativeStatus: 'queued'};
+      const promise = Promise.resolve().then(() => {diagnostic.nativeStatus = 'running'; diagnostic.enteredUtc = new Date().toISOString(); return resource.close();}).then(value => {
+        diagnostic.nativeStatus = 'completed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.after = resourceState(resource); return value;
+      }, error => {diagnostic.nativeStatus = 'failed'; diagnostic.settledUtc = new Date().toISOString(); diagnostic.nativeElapsedMs = performance.now() - start; diagnostic.error = errorRecord(error); throw error;});
+      closing.set(resource, {promise, diagnostic});
+    }
+    await timed('diagnostic cleanup', () => closing.get(resource).promise, timeoutMs);
+    return {status: 'closed', elapsedMs: Date.now() - started, diagnostic: closeDiagnostics(resource)};
   } catch (error) {
     console.error(`Browser diagnostic cleanup failure: ${error.stack || error}`);
+    console.error('Browser close diagnostic: ' + JSON.stringify({timeoutMs, waitElapsedMs: Date.now() - started, operation: closeDiagnostics(resource), stateAtTimeout: resourceState(resource)}));
     if (!alreadyFailed.has(resource)) throw error;
-    return {status: 'failed', elapsedMs: Date.now() - started, error: errorRecord(error)};
+    return {status: 'failed', elapsedMs: Date.now() - started, error: errorRecord(error), diagnostic: closeDiagnostics(resource)};
   }
 }
 
@@ -77,6 +86,8 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     at: new Date().toISOString(), elapsedMs: performance.now() - exportStarted,
     pageClosed: page.isClosed(), browserConnected: context.browser?.()?.isConnected?.() ?? null,
     ...extra});
+  const nativeTrace = instrumentTraceNative(context);
+  const removeNativeTrace = nativeTrace.subscribe(event => traceStage(event.stage, {...event, elapsedMs: event.monotonicMs - exportStarted}));
   observe(context, 'close', () => {traceStage('context-closed'); return {};});
   if (context.browser?.()) observe(context.browser(), 'disconnected', () => {traceStage('browser-disconnected'); return {};});
   let traceStop;
@@ -89,15 +100,15 @@ export async function withFailureEvidence({context, page, name, root = failureEv
         stagedFile: path.basename(tracePending)};
       traceStage('stop-requested');
       traceStop = Promise.resolve().then(() => {
-        traceStage('native-stop-entered');
+        traceStage('stop-api-entered');
         return context.tracing.stop({path: tracePending});
       }).then(() => {
         tracing = false; record.traceStop.status = 'completed';
         record.traceStop.finishedUtc = new Date().toISOString();
-        traceStage('native-stop-resolved');
+        traceStage('stop-api-resolved');
       }, error => {
         record.traceStop.status = 'failed'; record.traceStop.error = errorRecord(error);
-        record.traceStop.finishedUtc = new Date().toISOString(); traceStage('native-stop-rejected', {error: errorRecord(error)}); throw error;
+        record.traceStop.finishedUtc = new Date().toISOString(); traceStage('stop-api-rejected', {error: errorRecord(error)}); throw error;
       });
     }
     return traceStop;
@@ -216,6 +227,7 @@ export async function withFailureEvidence({context, page, name, root = failureEv
     }
     throw error;
   } finally {
+    removeNativeTrace();
     for (const remove of listeners) remove();
   }
 }

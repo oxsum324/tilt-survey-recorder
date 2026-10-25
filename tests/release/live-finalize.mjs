@@ -1,10 +1,11 @@
 import path from 'node:path';
 import {capturePolicy} from '../browser-failure-evidence.mjs';
 import {cleanupProfile, applyCleanupResult} from './profile-cleanup.mjs';
-import {writeEvidence, evidenceAttempt, ioError, stderrFallback} from './evidence-io.mjs';
+import {writeEvidence, evidenceAttempt, ioError, stderrFallback, publicationPrefix} from './evidence-io.mjs';
 
 export async function finalizeLiveUpgrade({record, out, profile, seed, context, gate, observer,
-  cleanup = cleanupProfile, write = writeEvidence, stderr = stderrFallback}) {
+  cleanup = cleanupProfile, write = writeEvidence, stderr = stderrFallback,
+  acknowledge = value => console.log(publicationPrefix + JSON.stringify(value))}) {
   const log = text => {try {stderr(text);} catch {}};
   const fail = (name, issue) => {
     (record.evidenceErrors ||= []).push({name, ...issue});
@@ -29,6 +30,7 @@ export async function finalizeLiveUpgrade({record, out, profile, seed, context, 
     const result = await evidenceAttempt(name, () => write(path.join(out, name), JSON.stringify(value, null, 2), {timeoutMs: remaining()}), remaining());
     const receipt = result.status === 'saved' ? result.value : result;
     if (receipt?.status !== 'saved') fail(name, receipt || {status: 'failed', error: {message: 'Missing write receipt'}});
+    return receipt;
   };
   if (observer) {
     const result = await evidenceAttempt('worker-observer-seal', () => observer.seal(remaining()), remaining());
@@ -45,7 +47,10 @@ export async function finalizeLiveUpgrade({record, out, profile, seed, context, 
     observer ? publish('worker-observer.json', record.workerObserver) : Promise.resolve(),
   ]);
   record.endedUtc = new Date().toISOString();
-  await publish('results.json', record);
+  const finalReceipt = await publish('results.json', record);
+  if (record.status !== 'failed' && finalReceipt?.publication) {
+    try {acknowledge(finalReceipt.publication);} catch (error) {fail('publication-acknowledgement', {status: 'failed', error: ioError(error)});}
+  }
   if (record.status === 'failed') log('Live final fallback record: ' + JSON.stringify(record));
   return {failed: record.status === 'failed'};
 }

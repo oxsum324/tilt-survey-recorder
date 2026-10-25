@@ -81,6 +81,10 @@ jobs:
       - name: Regress isolated final receipt and worker observer write failures
         id: evidence_io
         run: ./tests/ci/run-command.ps1 -Name evidence_io -Executable npm.cmd -Arguments @('run', 'test:evidence-io'); exit $LASTEXITCODE
+      - name: Regress late rename publication and native resource diagnostics
+        # Retain the original diagnostics and assertion suites.
+        id: publication
+        run: ./tests/ci/run-command.ps1 -Name publication -Executable npm.cmd -Arguments @('run', 'test:publication'); exit $LASTEXITCODE
       - name: Data tests (92)
         id: data
         run: ./tests/ci/run-command.ps1 -Name data -Executable npm.cmd -Arguments @('test'); exit $LASTEXITCODE

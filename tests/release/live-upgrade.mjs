@@ -13,6 +13,7 @@ import {syntheticImages} from './synthetic-images.mjs';
 import {createTransportGate} from './transport-gate.mjs';
 import {observeWorkers} from './worker-lifecycle.mjs';
 import {finalizeLiveUpgrade} from './live-finalize.mjs';
+import {closeWithEvidence} from './close-with-evidence.mjs';
 
 const [out, channel, mode, liveHead] = process.argv.slice(2);
 await fs.mkdir(out, {recursive: true});
@@ -73,7 +74,7 @@ try {
     await fs.writeFile(path.join(out, 'seed-diagnostics.json'), JSON.stringify(seedDiagnostics, null, 2));
     await finishSeed();
   });
-  await closeAfterEvidence(seed.browser() || seed); seed = null;
+  await closeWithEvidence(seed.browser() || seed, {out, label: 'seed-browser'}); seed = null;
   record.seedSessionClosed = true;
 
   // Reopen the same real browser profile with NO route handlers, initially offline.

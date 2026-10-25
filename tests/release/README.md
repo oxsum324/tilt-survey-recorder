@@ -124,3 +124,20 @@ incomplete狀態，不遺失記憶體取證。晚到結果不回填已封存收�
 雲端基本功能子程序的context.close亦曾實際逾時；其browser由該子程序獨立啟動，
 改於原2000ms直接關閉自己擁有的browser，並以finally仍嘗試關閉本機server。
 不增加期限，不改16項基本功能、trace成功邊界或非零退出斷言；首次失敗照實保留。
+
+## rename 晚到與原生階段診斷
+
+`test:publication`另跑12項，原14／7／13／13項回歸及其命令保持不變。
+通過結果的原始JSON一律為`status=unsealed`封套，payload SHA及隨機token綁定內容。
+rename即使已送入OS且晚到，也不能留下頂層passed收據；只有收尾在原期限內完成，才向
+stdout輸出`TILT_EVIDENCE_PUBLISHED`確認。父程序還必須核對原生exit0、無watchdog／signal、
+相符確認與payload SHA，再套用原status及checks斷言。失敗收據維持原格式。
+`execution.json.resultPublication`保存父程序核對結果；查看原始封套或僅看功能payload，
+都不代表通過。此機制不宣稱能取消已送入OS的檔案操作。
+
+新增回歸含真實檔案rename延遲／同步與非同步拒絕，各驗證先前成功／失敗、六個原生exit1、
+實際合成profile刪除與原錯誤保留；另驗證正常exit0、缺確認、錯token、內容變更及未封套JSON。
+trace在注入延遲前先包住原始Playwright公開API，分列fixture延遲、stop API入口及原生API
+進入／完成／拒絕；仍無法觀察Playwright內部壓縮或下載。原2250ms注入及全部期限不變。
+seed／basic關閉另存有界限診斷，包含真實close狀態、等待及原生耗時；設定檔清理亦分列
+共用預算剩餘、原生操作與等待結果。晚到操作不改封存收據，診斷保存失敗不取代原錯誤。
