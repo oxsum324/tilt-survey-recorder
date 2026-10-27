@@ -27,6 +27,8 @@ import { createMediaUI } from "./media-ui.js";
 import { setupDisplay } from "./display.js";
 import { imagePdf } from "./pdf.js";
 import { downloadBlob } from "./media.js";
+// 更換共用雲端資料夾時，只需替換下方 HANDOFF_FOLDER_URL 的網址。
+const HANDOFF_FOLDER_URL = "https://drive.google.com/drive/folders/1jwhulKJvNKLTRFoA1a5rw-PKIN9_5g7J";
 let project,
   tab = "case",
   selectedPair,
@@ -572,7 +574,7 @@ function reportView() {
       .map(([v, t]) => option(v, t, reportKind))
       .join(
         "",
-      )}</select></label><div class="button-row"><button class="primary" data-action="build-report">更新預覽</button><button data-action="print">系統列印／另存 PDF</button><button data-action="download-pdf">下載影像式 PDF</button><button data-action="export">匯出完整案件檔</button></div><label class="check-field"><input id="includeRaw" type="checkbox"${includeRaw ? " checked" : ""}>附原始讀數表與更正紀錄</label><label class="check-field"><input id="includePhotos" type="checkbox"${includePhotos ? " checked" : ""}>完整附件包含點位照片</label><label class="check-field"><input id="includeMap" type="checkbox"${includeMap ? " checked" : ""}>完整附件包含佈設圖（有底圖時）</label><p class="hint">系統列印保留向量圖及可選取文字；直接下載 PDF 為影像式。輸出期間請保持此分頁開啟。</p><div id="reportWarnings"></div></section><div id="reportRoot" class="report-pages"></div>` +
+      )}</select></label><div class="button-row"><button class="primary" data-action="build-report">更新預覽</button><button data-action="print">系統列印／另存 PDF</button><button data-action="download-pdf">下載影像式 PDF</button><button data-action="export">匯出完整案件檔</button></div><label class="check-field"><input id="includeRaw" type="checkbox"${includeRaw ? " checked" : ""}>附原始讀數表與更正紀錄</label><label class="check-field"><input id="includePhotos" type="checkbox"${includePhotos ? " checked" : ""}>完整附件包含點位照片</label><label class="check-field"><input id="includeMap" type="checkbox"${includeMap ? " checked" : ""}>完整附件包含佈設圖（有底圖時）</label><p class="hint">系統列印保留向量圖及可選取文字；直接下載 PDF 為影像式。輸出期間請保持此分頁開啟。</p><a class="cloud-folder-link" href="${HANDOFF_FOLDER_URL}" target="_blank" rel="noopener noreferrer">開啟共用雲端資料夾 ↗</a><p class="hint">請將匯出的案件檔放入 Drive 專案資料夾，並在 Drive 確認同步完成。</p><div id="reportWarnings"></div></section><div id="reportRoot" class="report-pages"></div>` +
     mobileCaseActions()
   );
 }
