@@ -295,6 +295,14 @@ main {
   padding: 3px 7px;
   margin-left: 8px;
 }
+.cloud-folder-link {
+  display: inline-block;
+  max-width: 100%;
+  min-height: 44px;
+  padding: 12px 0;
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
 .hint {
   font-size: 12px !important;
   color: var(--muted) !important;
