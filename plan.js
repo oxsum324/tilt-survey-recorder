@@ -1,5 +1,6 @@
 import {escapeXml as esc} from './sketch.js';
-import {labels} from './model.js';
+import {labels,isConfirmed} from './model.js';
+import {calculatePair} from './calc.js';
 import {clamp,arrowPath} from './annotation-geometry.js';
 import {createMagnifier} from './annotation.js';
 export const PAPER={width:180,height:210};
@@ -11,12 +12,29 @@ export function markerGeometry(marker,bounds,axis,text){
   const edges=[{x:box.x,y:box.y+h/2},{x:box.x+w,y:box.y+h/2},{x:box.x+w/2,y:box.y},{x:box.x+w/2,y:box.y+h}],start=edges.reduce((a,b)=>Math.hypot(b.x-point.x,b.y-point.y)<Math.hypot(a.x-point.x,a.y-point.y)?b:a);
   return {point,box,start};
 }
+// 底圖上的立面朝向：planNormalDeg 為外法線在底圖上的方向，0＝底圖上方，順時針；觀測者站在外法線側面向立面。
+export function planVectors(deg){const a=deg*Math.PI/180,normal={x:Math.sin(a),y:-Math.cos(a)};return {normal,right:{x:normal.y,y:-normal.x}};}
+export function tiltVector(direction,deg){const {normal,right}=planVectors(deg);return {left:{x:-right.x,y:-right.y},right,front:normal,back:{x:-normal.x,y:-normal.y}}[direction]||null;}
+const at=(p,v,k)=>({x:p.x+v.x*k,y:p.y+v.y*k});
+export function facingGlyph(point,facade){
+  if(facade?.planNormalDeg==null)return '';
+  const {normal,right}=planVectors(facade.planNormalDeg),a=at(point,right,-4.5),c=at(point,right,4.5),tail=at(point,normal,7.5),head=at(point,normal,2.4),L=at(at(point,right,-6.4),normal,2.6),R=at(at(point,right,6.4),normal,2.6);
+  const letter=(q,t)=>`<text x="${q.x}" y="${q.y}" dominant-baseline="central" text-anchor="middle" font-size="2.4" fill="#111" stroke="white" stroke-width=".5" paint-order="stroke">${t}</text>`;
+  return `<g data-glyph="facing" data-degrees="${facade.planNormalDeg}"><line x1="${a.x}" y1="${a.y}" x2="${c.x}" y2="${c.y}" stroke="#111" stroke-width=".55"/><path d="${arrowPath(tail,head,1.6)}" fill="none" stroke="#111" stroke-width=".4"/>${letter(L,'左')}${letter(R,'右')}</g>`;
+}
+export function tiltArrows(point,pair,facade,settings){
+  if(facade?.planNormalDeg==null||!isConfirmed(pair,facade))return '';
+  const result=calculatePair(pair,facade,settings);
+  return ['inPlane','outPlane'].map(axis=>{const r=result[axis];if(r.status!=='ok'||!r.dxMm||!r.direction)return '';const v=tiltVector(r.direction,facade.planNormalDeg);
+    return `<path data-tilt="${axis}" data-direction="${r.direction}" d="${arrowPath(at(point,v,2.2),at(point,v,9.5),2.2)}" fill="none" stroke="#111" stroke-width=".7"${axis==='outPlane'?' stroke-dasharray="2.2 1"':''}/>`;}).join('');
+}
 export function planSvg(project,url,{editor=false,selectedId=''}={}){
   const b=imageBounds(project.map.width,project.map.height);
   const marks=project.pairs.filter(p=>p.mapMarker).map(p=>{
-    const l=labels(p,project.settings),m=p.mapMarker,point=markerGeometry(m,b,'inPlane',l.inPlane).point;
+    const l=labels(p,project.settings),m=p.mapMarker,point=markerGeometry(m,b,'inPlane',l.inPlane).point,facade=project.facades.find(f=>f.id===p.facadeId);
+    const glyph=facingGlyph(point,facade)+tiltArrows(point,p,facade,project.settings);
     const labelMarkup=['inPlane','outPlane'].map(axis=>{const {box,start}=markerGeometry(m,b,axis,l[axis]);return `<g${editor?` data-handle="label" data-pair-id="${p.id}" data-axis="${axis}"`:''}><path d="${arrowPath(start,point,2)}" fill="none" stroke="#111" stroke-width=".4"/><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="white" stroke="#111" stroke-width=".3"/><text x="${box.x+box.w/2}" y="${box.y+box.h/2}" dominant-baseline="central" text-anchor="middle" font-size="3.2" font-weight="bold" fill="#111">${esc(l[axis])}</text></g>`;}).join('');
-    return labelMarkup+`<g${editor?` data-handle="point" data-pair-id="${p.id}"`:''}><circle cx="${point.x}" cy="${point.y}" r="1.5" fill="#111" stroke="white" stroke-width=".4"/>${editor?`<circle cx="${point.x}" cy="${point.y}" r="5" fill="transparent" stroke="${p.id===selectedId?'#c42e27':'transparent'}" stroke-width=".45"/>`:''}</g>`;
+    return glyph+labelMarkup+`<g${editor?` data-handle="point" data-pair-id="${p.id}"`:''}><circle cx="${point.x}" cy="${point.y}" r="1.5" fill="#111" stroke="white" stroke-width=".4"/>${editor?`<circle cx="${point.x}" cy="${point.y}" r="5" fill="transparent" stroke="${p.id===selectedId?'#c42e27':'transparent'}" stroke-width=".45"/>`:''}</g>`;
   }).join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" class="plan-svg" viewBox="0 0 180 210" role="img" aria-label="傾斜測點佈設圖"><rect width="180" height="210" fill="white"/><image href="${esc(url)}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="xMidYMid meet"/>${marks}</svg>`;
 }

@@ -1,10 +1,10 @@
 import {compass,baselineCompass} from './calc.js';
-export const VERSION='0.5.1';
+export const VERSION='0.6.0';
 export const id=()=>crypto.randomUUID();
 const point=()=>({N:'',E:'',Z:''});
 export function measurement(axis) { return {mode:'',status:'measured',skipReason:'',A:{rounds:[{source:'offset',dxCm:'',upperCm:'',lowerCm:'',dir:axis==='inPlane'?'right':'back'}],hCm:''},B:{station:axis==='inPlane'?'rightSide':'front',rounds:[{tp:{HD:'',VD:''},tb:{HD:'',VD:''}}]},firstEnteredAt:null}; }
-export function createFacade(name='立面 1') { return {id:id(),name,facingDeg:'',baseline:{method:'none',A:{N:'',E:''},B:{N:'',E:''},azimuthDeg:''},building:{floorHeightsCm:['360','320','320','320'],parapetCm:'110',widthCm:'450',sideShownCm:'500',groundFloorType:'shop',showOpenings:true}}; }
-export function createPair(index,facadeId,mode='A') { return {id:id(),index,facadeId,mode,corner:'right',cornerOffsetCm:'',tbHeightCm:'',note:'',sharedH:true,inPlane:measurement('inPlane'),outPlane:measurement('outPlane'),C:{rounds:[{tp:point(),tb:point()}]},photos:[],mapMarker:null,confirmed:null}; }
+export function createFacade(name='立面 1') { return {id:id(),name,facingDeg:'',planNormalDeg:null,baseline:{method:'none',A:{N:'',E:''},B:{N:'',E:''},azimuthDeg:''},building:{floorHeightsCm:['360','320','320','320'],parapetCm:'110',widthCm:'450',sideShownCm:'500',groundFloorType:'shop',showOpenings:true,sketchMode:'scaled'}}; }
+export function createPair(index,facadeId,mode='A') { return {id:id(),index,facadeId,mode,corner:'right',cornerOffsetCm:'',tbHeightCm:'',note:'',sharedH:true,inPlane:measurement('inPlane'),outPlane:measurement('outPlane'),C:{rounds:[{tp:point(),tb:point()}]},photos:[],mapMarker:null,sketchMarks:null,confirmed:null}; }
 export function createProject() {
   const facade=createFacade(),now=new Date().toISOString();
   return {schema:1,id:id(),appVersion:VERSION,createdAt:now,updatedAt:now,lastExportedAt:null,

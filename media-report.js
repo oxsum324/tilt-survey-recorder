@@ -27,7 +27,7 @@ export async function photoReport(project,read=loadMedia){
 }
 export async function mapReport(project,read=loadMedia){
   if(!project.map)return '';const m=project.map,url=await blobDataUrl(await markedImage(await mediaBlob(m.mediaId,read),[]));
-  return `<section class="sheet map-sheet">${title(project,'傾斜測量測點佈設圖','—')}<div class="map-report-board">${planSvg(project,url)}</div><footer class="media-footer"><b>● 測點</b>　${project.settings.labelStyle==='TS'?'T：立面內；S：立面外':'T：立面內；T′：立面外'}<br>底圖來源：${esc(m.source)}　截圖／製圖日期：${esc(m.capturedOn)}<br>位置／地址：${esc(m.approxAddress||project.header.address||'○○')}<br>底圖僅供位置示意，非比例尺圖。${project.pairs.filter(p=>p.mapMarker).length}／${project.pairs.length} 組已標位置。</footer></section>`;
+  return `<section class="sheet map-sheet">${title(project,'傾斜測量測點佈設圖','—')}<div class="map-report-board">${planSvg(project,url)}</div><footer class="media-footer"><b>● 測點</b>　${project.settings.labelStyle==='TS'?'T：立面內；S：立面外':'T：立面內；T′：立面外'}<br>底圖來源：${esc(m.source)}　截圖／製圖日期：${esc(m.capturedOn)}<br>位置／地址：${esc(m.approxAddress||project.header.address||'○○')}<br>底圖僅供位置示意，非比例尺圖。${project.pairs.filter(p=>p.mapMarker).length}／${project.pairs.length} 組已標位置。${project.pairs.some(p=>p.mapMarker&&project.facades.find(f=>f.id===p.facadeId)?.planNormalDeg!=null)?'<br>⊥ 符號：面向立面之視向（箭頭指向立面外側，左右依此判定）；測點旁箭頭：已確認讀數之傾斜方向（實線立面內、虛線立面外）。':''}</footer></section>`;
 }
 export async function fullReport(project,{kind='all',includeRaw=true,includePhotos=true,includeMap=true}={},read=loadMedia){
   let html=['all','results'].includes(kind)?reportDocument(project,{includeRaw}):'';
