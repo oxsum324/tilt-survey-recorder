@@ -22,6 +22,7 @@ import {
   parseVerifiedBackup,
 } from "./store.js";
 import { buildingParameters, escapeXml as esc } from "./sketch.js";
+import { createSketchEditor } from "./sketch-editor.js";
 import { outputIssues, fullReport } from "./media-report.js";
 import { createMediaUI } from "./media-ui.js";
 import { setupDisplay } from "./display.js";
@@ -306,7 +307,19 @@ function facadeView() {
         ["house", "住宅"],
         ["blank", "不畫開口"],
       ],
-    )}</div>${check("繪製開口示意", `${prefix}.building.showOpenings`, f.building.showOpenings)}<h4>各樓層樓高（由下而上）</h4><div class="floor-grid">${f.building.floorHeightsCm.map((h, i) => input(`${i + 1}F 樓高`, `${prefix}.building.floorHeightsCm.${i}`, h, { unit: "cm" })).join("")}</div><div class="button-row"><button data-action="add-floor">＋新增樓層</button><button data-action="remove-floor" ${f.building.floorHeightsCm.length === 1 ? "disabled" : ""}>移除頂層</button></div><p class="hint">預設樓高及寬度均可調整；TB 離地高度未量測時，圖面會明確註記。</p></section>
+    )}${select(
+      "立面繪製方式",
+      `${prefix}.building.sketchMode`,
+      f.building.sketchMode,
+      [
+        ["scaled", "依樓高比例（需各層樓高）"],
+        ["schematic", "示意（樓層等高、不依比例）"],
+      ],
+    )}</div>${check("繪製開口示意", `${prefix}.building.showOpenings`, f.building.showOpenings)}<h4>樓層</h4><div class="form-grid quick-floors"><label class="field"><span>樓層數</span><input id="quickFloorCount" type="number" min="1" max="60" step="1" inputmode="numeric" value="${f.building.floorHeightsCm.length}" autocomplete="off"></label><label class="field"><span>標準層高 <small>（cm）</small></span><input id="quickFloorHeight" inputmode="decimal" value="320" autocomplete="off"></label><div class="button-row"><button data-action="fill-floors">依樓層數填入</button></div></div><p class="hint">1F 樓高保留目前值，2F 以上以標準層高填入，仍可逐層修改。示意模式只使用層數，樓高不影響圖面。</p>${
+      f.building.sketchMode === "schematic"
+        ? `<p class="hint">目前 ${f.building.floorHeightsCm.length} 層。示意模式下 TB／TP 的位置改在「測點與讀數」的「立面示意位置」點選；垂距 H 與離地高度仍以讀數及欄位數值標註。</p>`
+        : `<h4>各樓層樓高（由下而上）</h4><div class="floor-grid">${f.building.floorHeightsCm.map((h, i) => input(`${i + 1}F 樓高`, `${prefix}.building.floorHeightsCm.${i}`, h, { unit: "cm" })).join("")}</div>`
+    }<div class="button-row"><button data-action="add-floor">＋新增樓層</button><button data-action="remove-floor" ${f.building.floorHeightsCm.length === 1 ? "disabled" : ""}>移除頂層</button></div><p class="hint">預設樓高及寬度均可調整；TB 離地高度未量測時，圖面會明確註記。</p></section>
     <section class="card"><h3>模式 C 的立面基準</h3><p>兩點法由面向立面的左端 A 指向右端 B；方位角也是由左至右方向。</p>${select(
       "基準方式",
       `${prefix}.baseline.method`,
@@ -501,7 +514,23 @@ function pairSettingsView(pair, index, uses) {
     `pairs.${index}.facadeId`,
     pair.facadeId,
     project.facades.map((f) => [f.id, f.name]),
-  )}</div>${uses("A") ? `<div class="shared-height-row">${check("兩方向共用垂距 H", `pairs.${index}.sharedH`, pair.sharedH)}${pair.sharedH ? input("H", `pairs.${index}.inPlane.A.hCm`, pair.inPlane.A.hCm, { unit: "cm", ariaLabel: "共用垂距 H（cm）" }) : ""}</div>` : ""}${disclosure(`pair:${pair.id}:more`, "更多設定", moreSummary(pair), more, pair.corner !== "right" || !!pair.tbHeightCm || !!pair.note)}${uses("B") ? '<p class="hint">測站應位於待測分量的方向線上；視線斜交時，量得值為視線方向分量。</p>' : ""}${uses("C") ? '<p class="hint">N（北）、E（東）、Z（高程），請先在「立面參數」設定基準。</p>' : ""}</section>`;
+  )}</div>${uses("A") ? `<div class="shared-height-row">${check("兩方向共用垂距 H", `pairs.${index}.sharedH`, pair.sharedH)}${pair.sharedH ? input("H", `pairs.${index}.inPlane.A.hCm`, pair.inPlane.A.hCm, { unit: "cm", ariaLabel: "共用垂距 H（cm）" }) : ""}</div>` : ""}${disclosure(`pair:${pair.id}:more`, "更多設定", moreSummary(pair), more, pair.corner !== "right" || !!pair.tbHeightCm || !!pair.note)}${uses("B") ? '<p class="hint">測站應位於待測分量的方向線上；視線斜交時，量得值為視線方向分量。</p>' : ""}${uses("C") ? '<p class="hint">N（北）、E（東）、Z（高程），請先在「立面參數」設定基準。</p>' : ""}</section>${sketchEditorView(pair)}`;
+}
+function sketchEditorView(pair) {
+  const f = project.facades.find((f) => f.id === pair.facadeId);
+  if (f?.building.sketchMode !== "schematic") return "";
+  const l = labels(pair, project.settings);
+  return `<section class="card sketch-editor-card"><h3>立面示意位置（${l.tb}／${l.tp}）</h3><div class="button-row"><button data-sketch="tb" class="primary" aria-pressed="true">點 ${l.tb}</button><button data-sketch="tp" aria-pressed="false">點 ${l.tp}</button><button data-sketch="clear">清除位置</button></div><p id="sketchHint" class="annotation-hint">先點 ${l.tb} 所在高度，再點 ${l.tp}；也可拖曳紅圈調整。只影響圖面示意，不改讀數與 H。</p><div id="sketchStage" class="sketch-stage" data-pair-id="${pair.id}"></div><p class="hint">${pair.sketchMarks ? `已點選：${l.tb} 約在樓高 ${(pair.sketchMarks.tb * 100).toFixed(0)}%、${l.tp} 約在 ${(pair.sketchMarks.tp * 100).toFixed(0)}%。` : "尚未點選，圖面以預設位置示意。"}</p></section>`;
+}
+let sketchEditor = null;
+function syncSketchButtons(target) {
+  document.querySelectorAll("[data-sketch]").forEach((b) => {
+    if (b.dataset.sketch === "clear") return;
+    b.classList.toggle("primary", b.dataset.sketch === target);
+    b.setAttribute("aria-pressed", String(b.dataset.sketch === target));
+  });
+  const hint = $("#sketchHint");
+  if (hint) hint.textContent = target === "tb" ? "點選或拖曳決定 TB 高度；完成後自動切換為 TP。" : "點選或拖曳決定 TP 高度（須高於 TB）。";
 }
 function readingCardsView(pair, index) {
   return `<div class="measurement-grid">${directionForm(pair, index, "inPlane")}${directionForm(pair, index, "outPlane")}</div><section class="card confirm-card"><div id="confirmState"></div><div class="button-row"><button class="primary" data-action="confirm">確認本組讀數</button><button data-action="preview">預覽成果表</button><button data-action="tab-photos">點位照片與標註</button><button data-action="tab-map">平面圖標示</button><button class="danger-text" data-action="delete-pair">刪除本組</button></div><p class="hint">草稿會自動保存；產出成果前須確認讀數。更正已確認的讀數時，會要求填原因。</p></section>`;
@@ -653,6 +682,23 @@ function render() {
   observeResultsSize();
   if (tab === "reports") buildReport();
   else mediaUI.mount(tab);
+  mountSketchEditor();
+}
+function mountSketchEditor() {
+  sketchEditor = null;
+  const stage = $("#sketchStage");
+  if (!stage) return;
+  const pair = project.pairs.find((p) => p.id === stage.dataset.pairId),
+    facade = project.facades.find((f) => f.id === pair?.facadeId);
+  if (!pair || !facade) return;
+  try {
+    sketchEditor = createSketchEditor(stage, pair, facade, project.settings, (target) => {
+      changed();
+      syncSketchButtons(target);
+    });
+  } catch (e) {
+    stage.innerHTML = `<p class="hint">${esc(e.message)}</p>`;
+  }
 }
 function resizeReports() {
   const root = $("#reportRoot");
@@ -923,6 +969,12 @@ async function action(name) {
     facade.building.floorHeightsCm.push("320");
   } else if (name === "remove-floor") {
     if (facade.building.floorHeightsCm.length > 1) facade.building.floorHeightsCm.pop();
+  } else if (name === "fill-floors") {
+    const count = Number($("#quickFloorCount").value),
+      height = $("#quickFloorHeight").value.trim();
+    if (!Number.isInteger(count) || count < 1 || count > 60) throw Error("樓層數須為 1 至 60 的整數");
+    if (!/^\d+(\.\d*)?$/.test(height) || +height < 1 || +height > 10000) throw Error("標準層高須為 1 至 10000 cm");
+    facade.building.floorHeightsCm = [facade.building.floorHeightsCm[0] || "360", ...Array(count - 1).fill(height)];
   } else if (name === "confirm") {
     if (!pair) return;
     const f = project.facades.find((f) => f.id === pair.facadeId),
@@ -1027,6 +1079,15 @@ document.addEventListener("click", async (event) => {
       project.settings.defaultMode = b.dataset.defaultMode;
       changed();
       render();
+    } else if (b.dataset.sketch) {
+      if (!sketchEditor) return;
+      if (b.dataset.sketch === "clear") {
+        sketchEditor.clear();
+        changed();
+      } else {
+        sketchEditor.setTarget(b.dataset.sketch);
+        syncSketchButtons(b.dataset.sketch);
+      }
     } else if (b.dataset.action) await action(b.dataset.action);
     else if (b.dataset.sign) {
       const value = get(b.dataset.sign);

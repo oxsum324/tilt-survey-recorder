@@ -1933,3 +1933,34 @@ dialog p {
     padding-top: 0;
   }
 }
+
+/* V0.6.0：底圖立面朝向工具列與示意模式立面點選 */
+.map-facing {
+  margin-top: 12px;
+}
+.map-facing-row button {
+  min-width: 46px;
+}
+.quick-floors {
+  align-items: end;
+}
+.sketch-stage {
+  width: min(100%, 300px);
+  margin: 12px auto;
+  background: white;
+  border: 1px solid #829c9a;
+  aspect-ratio: 48 / 87;
+  touch-action: none;
+  user-select: none;
+  overflow: hidden;
+}
+.sketch-stage svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+}
+.sketch-stage [data-sketch-handle],
+.sketch-stage [data-sketch-area] {
+  cursor: crosshair;
+}

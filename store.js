@@ -105,6 +105,10 @@ export function normalizeProject(value) {
     facade.building.floorHeightsCm.forEach(raw);for(const key of ['parapetCm','widthCm','sideShownCm'])raw(facade.building[key]);
     for(const side of ['A','B'])for(const key of ['N','E'])raw(facade.baseline[side][key]);raw(facade.baseline.azimuthDeg);
     if(!['none','twoPoints','azimuth'].includes(facade.baseline.method)||!['shop','house','blank'].includes(facade.building.groundFloorType))throw Error('立面參數選項無效');
+    // V0.6.0 新欄位：舊案件未含時不補寫，維持原內容往返一致；程式一律把缺漏視為未設定。
+    if(!Object.hasOwn(f,'planNormalDeg'))delete facade.planNormalDeg;if(!Object.hasOwn(f.building||{},'sketchMode'))delete facade.building.sketchMode;
+    if(facade.building.sketchMode!==undefined&&!['scaled','schematic'].includes(facade.building.sketchMode))throw Error('立面繪製方式無效');
+    if(facade.planNormalDeg!=null&&(typeof facade.planNormalDeg!=='number'||!Number.isFinite(facade.planNormalDeg)||facade.planNormalDeg<0||facade.planNormalDeg>=360))throw Error('底圖立面朝向無效');
     return facade;
   });
   const indexes=new Set(),ids=new Set(),photoIds=new Set();
@@ -118,6 +122,8 @@ export function normalizeProject(value) {
     for(const photo of q.photos){if(!object(photo))throw Error('照片資料無效');identifier(photo.id);identifier(photo.mediaId);if(photoIds.has(photo.id))throw Error('照片識別重複');photoIds.add(photo.id);for(const key of ['fileName','description','stampDate','capturedAt','addedAt'])raw(photo[key]);if(!['exif','import'].includes(photo.capturedAtSource)||typeof photo.showStamp!=='boolean'||photo.stampDate.length>40||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(photo.capturedAt)||Number.isNaN(Date.parse(photo.addedAt)))throw Error('照片時間或來源無效');validateMarks(photo.marks);}
     if(q.mapMarker!==null){const m=q.mapMarker;if(!object(m)||!Number.isFinite(m.x)||!Number.isFinite(m.y)||m.x<0||m.x>100||m.y<0||m.y>100)throw Error('底圖測點位置無效');for(const axis of ['inPlane','outPlane'])for(const key of ['dx','dy'])if(!Number.isFinite(m[axis]?.[key])||Math.abs(m[axis][key])>1000)throw Error('底圖標籤位置無效');}
 
+    if(!Object.hasOwn(pair,'sketchMarks'))delete q.sketchMarks;
+    if(q.sketchMarks!=null){const m=q.sketchMarks;if(!object(m)||!Number.isFinite(m.tb)||!Number.isFinite(m.tp)||m.tb<0||m.tp>1||m.tp<=m.tb)throw Error('立面示意位置無效');}
     if(q.confirmed!==null && (!object(q.confirmed)||typeof q.confirmed.snapshot!=='string'||typeof q.confirmed.at!=='string'))throw Error('讀數確認紀錄無效');
     return q;
   });

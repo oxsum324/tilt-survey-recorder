@@ -1,19 +1,23 @@
 import {labels} from './model.js';
 export const escapeXml=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const finite=(value,min,max,name)=>{if(typeof value!=='string'||!value.trim()||!/^\d+(\.\d*)?$/.test(value)||!Number.isFinite(+value)||+value<min||+value>max)throw Error(`${name}參數無效`);return +value;};
+const clamp01=(v,min,max)=>Math.max(min,Math.min(max,v));
+// 示意模式：樓層等高繪製、不依比例，TB／TP 由 pair.sketchMarks（0～1 相對高度）決定；垂距 H 與離地高度數值仍取自讀數與欄位。
+export function schematicMarks(pair){const m=pair.sketchMarks,tb=m?clamp01(m.tb,0,.96):.17,tp=m?clamp01(m.tp,tb+.02,1):Math.min(tb+.5,.96);return {tb,tp};}
 export function buildingParameters(facade,pair) {
-  const b=facade.building,floors=b.floorHeightsCm.map(v=>finite(v,1,10000,'樓高'));
+  const b=facade.building,schematic=b.sketchMode==='schematic',floors=schematic?b.floorHeightsCm.map(()=>320):b.floorHeightsCm.map(v=>finite(v,1,10000,'樓高'));
+  if(schematic&&(!floors.length||floors.length>60))throw Error('樓層數無效');
   const width=finite(b.widthCm,1,100000,'立面寬'),side=finite(b.sideShownCm,1,100000,'側立面長度'),parapet=finite(b.parapetCm,0,5000,'女兒牆');
   const tb=pair.tbHeightCm===''?null:finite(pair.tbHeightCm,0,100000,'TB 離地高度');
   const offset=pair.corner==='custom'?finite(pair.cornerOffsetCm,0,width,'測線位置'):null;
-  return {floors,width,side,parapet,tb,offset,total:floors.reduce((a,b)=>a+b,0)+parapet};
+  return {schematic,floors,width,side,parapet,tb,offset,total:floors.reduce((a,b)=>a+b,0)+parapet};
 }
 export function sketchGeometry(pair,facade,result,axis,settings={}) {
-  const p=buildingParameters(facade,pair),h=Number(result.hCm),tb=p.tb??p.total*0.17,tp=tb+h;
+  const p=buildingParameters(facade,pair),h=Number(result.hCm)||0,marks=p.schematic?schematicMarks(pair):null,tb=p.schematic?marks.tb*p.total:p.tb??p.total*0.17,tp=p.schematic?marks.tp*p.total:tb+h;
   const bounds=Math.max(p.total,tp),side=axis==='outPlane',left=pair.corner==='left';
   const physicalWidth=side?p.side:p.width;
   const omitted=[];let cumulative=0;
-  if(p.floors.length>6) {
+  if(!p.schematic&&p.floors.length>6) {
     for(let i=0;i<p.floors.length;i++) {
       const bottom=cumulative,top=bottom+p.floors[i];cumulative=top;
       const nearMeasurement=top>=tb-(p.floors[i]||320)&&bottom<=tp+(p.floors[i]||320);
@@ -30,11 +34,11 @@ export function sketchGeometry(pair,facade,result,axis,settings={}) {
   const sign=result.direction==='right'||result.direction==='back'?1:-1;
   const screenSign=axis==='outPlane'&&left?-sign:sign;
   const tiltTb={x:69,y:64},tiltTp={x:69+(result.dxMm===0?0:screenSign*8.16),y:16};
-  return {parameters:p,scale,ground,x0,x1,pointX:x,dimensionX,labelX,outward,side,left,omitted,compressed:omitted.length>0,
+  return {parameters:p,schematic:p.schematic,marks,scale,ground,x0,x1,pointX:x,dimensionX,labelX,outward,side,left,omitted,compressed:omitted.length>0,
     tb:{x,y:y(tb)},tp:{x,y:y(tp)},floorY:z=>y(z),roofY:y(p.total),h,actualTb:tb,tiltTb,tiltTp,labels:labels(pair,settings)};
 }
-export function sketch(pair,facade,result,axis,settings={}) {
-  if(result.status!=='ok')return {svg:'',texts:[],geometry:null};
+export function sketch(pair,facade,result,axis,settings={},{editor=false}={}) {
+  if(result.status!=='ok'){if(!editor)return {svg:'',texts:[],geometry:null};result={status:'ok',hCm:'—',dxCm:'—',dxMm:0,direction:null};}
   const g=sketchGeometry(pair,facade,result,axis,settings),parts=[],texts=[];
   const line=(x1,y1,x2,y2,w=.18,extra='',color='#111')=>parts.push(`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${color}" stroke-width="${w}" ${extra}/>`);
   const text=(x,y,value,size=2.3,anchor='middle',rotate=false,bold=false)=>{
@@ -82,7 +86,7 @@ export function sketch(pair,facade,result,axis,settings={}) {
     }
   }
   line(g.tb.x,g.tb.y,g.tp.x,g.tp.y,.8);circle(g.tb);circle(g.tp);
-  const tpLabelY=g.tp.y-2,tbLabelY=g.tb.y+4;
+  const tpLabelY=g.tp.y-2,tbLabelY=Math.min(g.tb.y+4,g.ground-3.2);
   line(g.tp.x,g.tp.y,g.labelX,tpLabelY,.13);line(g.tb.x,g.tb.y,g.labelX,tbLabelY-.6,.13);
   text(g.labelX,tpLabelY,g.labels.tp,2.4,g.outward?'end':'start',false,true);text(g.labelX,tbLabelY,g.labels.tb,2.4,g.outward?'end':'start',false,true);
   line(g.tb.x,g.tb.y,g.dimensionX,g.tb.y,.13);line(g.tp.x,g.tp.y,g.dimensionX,g.tp.y,.13);
@@ -90,6 +94,8 @@ export function sketch(pair,facade,result,axis,settings={}) {
   if(g.parameters.tb!==null&&g.parameters.tb>0) {line(g.x0,g.ground,g.dimensionX,g.ground,.13);dimension(g.dimensionX,g.ground,g.tb.y,pair.tbHeightCm);}
   if(g.parameters.tb===null)text(24,77,'TB 離地高度未量測，位置示意',1.65);
   if(g.compressed)text(24,79.5,'中間樓層省略，尺寸以標註為準',1.65);
+  if(g.schematic)text(24,79.5,'示意模式：樓層等高繪製，不依比例',1.65);
+  if(editor)parts.push(`<rect data-sketch-area x="${g.x0}" y="${g.roofY}" width="${g.x1-g.x0}" height="${g.ground-g.roofY}" fill="transparent"/><circle data-sketch-handle="tb" cx="${g.tb.x}" cy="${g.tb.y}" r="3.2" fill="transparent" stroke="#c42e27" stroke-width=".35"/><circle data-sketch-handle="tp" cx="${g.tp.x}" cy="${g.tp.y}" r="3.2" fill="transparent" stroke="#c42e27" stroke-width=".35"/>`);
   text(24,83,g.side?`側立面示意（${g.left?'左':'右'}側視，僅繪前段）`:'正立面示意（面向立面）',1.9);
   line(g.tiltTb.x,11,g.tiltTb.x,68,.18,'stroke-dasharray="1 1"');
   line(g.tiltTb.x,g.tiltTb.y,g.tiltTp.x,g.tiltTp.y,.55);circle(g.tiltTb);circle(g.tiltTp);
@@ -102,5 +108,5 @@ export function sketch(pair,facade,result,axis,settings={}) {
   text(52,76,leftWord,2.2);text(90,76,rightWord,2.2);
   if(result.dxMm) {const sign=g.tiltTp.x>g.tiltTb.x?1:-1;line(67,75,67+sign*8,75,.3);line(67+sign*8,75,67+sign*6.8,73.9,.3);line(67+sign*8,75,67+sign*6.8,76.1,.3);}
   text(71,82,'傾斜示意（角度放大，非依比例）',1.9);
-  return {svg:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 93 87" role="img" aria-label="${escapeXml(g.labels[axis])}立面與傾斜示意" font-family="Noto Sans TC,Microsoft JhengHei,PingFang TC,sans-serif" fill="#111"><rect width="93" height="87" fill="white"/>${parts.join('')}</svg>`,texts,geometry:g};
+  return {svg:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${editor?48:93} 87" role="img" aria-label="${escapeXml(g.labels[axis])}立面與傾斜示意" font-family="Noto Sans TC,Microsoft JhengHei,PingFang TC,sans-serif" fill="#111"><rect width="93" height="87" fill="white"/>${parts.join('')}</svg>`,texts,geometry:g};
 }
