@@ -59,9 +59,9 @@ jobs:
       - name: Install Python dependencies with evidence
         id: python_install
         run: ./tests/ci/run-command.ps1 -Name python_install -Executable python -Arguments @('-m', 'pip', 'install', '-r', 'tests/desktop/requirements.txt'); exit $LASTEXITCODE
-      - name: Install both browsers with evidence
+      - name: Install Chrome, Edge and WebKit with evidence
         id: browser_install
-        run: ./tests/ci/run-command.ps1 -Name browser_install -Executable npx.cmd -Arguments @('playwright', 'install', 'chrome', 'msedge'); exit $LASTEXITCODE
+        run: ./tests/ci/run-command.ps1 -Name browser_install -Executable npx.cmd -Arguments @('playwright', 'install', 'chrome', 'msedge', 'webkit'); exit $LASTEXITCODE
       - name: Install verified Traditional Chinese font for PDF checks
         id: font_install
         run: ./tests/ci/run-command.ps1 -Name font_install -Executable ./tests/desktop/install-ci-font.ps1; exit $LASTEXITCODE
