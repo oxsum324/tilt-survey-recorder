@@ -4,14 +4,21 @@ import assert from 'node:assert/strict';
 import {loadSites, sha} from './site.mjs';
 
 export const liveUrl = 'https://oxsum324.github.io/tilt-survey-recorder/';
+export function assertPublishedManifest(manifest, expectedHead) {
+  assert.equal(manifest.commit, expectedHead);
+  assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
+  // V0.6.0 added sketch-editor.js to the 27 preexisting public runtime files.
+  assert.equal(manifest.files.length, 28);
+  assert.equal(new Set(manifest.files.map(file => file.path)).size, 28);
+  assert.ok(manifest.files.some(file => file.path === 'sketch-editor.js'), 'Published schematic editor must be present');
+}
 export async function loadLiveSites(expectedHead) {
   assert.match(expectedHead, /^[a-f0-9]{40}$/);
   const sites = await loadSites();
   const response = await fetch(liveUrl + 'deploy-manifest.json?svg-evidence=' + Date.now());
   assert.equal(response.status, 200);
   const manifest = await response.json();
-  assert.equal(manifest.commit, expectedHead); assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
-  assert.equal(manifest.files.length, 27);
+  assertPublishedManifest(manifest, expectedHead);
   const current = new Map();
   for (const file of manifest.files) {
     const response = await fetch(liveUrl + file.path + '?svg-evidence=' + Date.now());
