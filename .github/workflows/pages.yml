@@ -59,9 +59,9 @@ jobs:
       - name: Install Python dependencies with evidence
         id: python_install
         run: ./tests/ci/run-command.ps1 -Name python_install -Executable python -Arguments @('-m', 'pip', 'install', '-r', 'tests/desktop/requirements.txt'); exit $LASTEXITCODE
-      - name: Install both browsers with evidence
+      - name: Install Chrome, Edge and WebKit with evidence
         id: browser_install
-        run: ./tests/ci/run-command.ps1 -Name browser_install -Executable npx.cmd -Arguments @('playwright', 'install', 'chrome', 'msedge'); exit $LASTEXITCODE
+        run: ./tests/ci/run-command.ps1 -Name browser_install -Executable npx.cmd -Arguments @('playwright', 'install', 'chrome', 'msedge', 'webkit'); exit $LASTEXITCODE
       - name: Install verified Traditional Chinese font for PDF checks
         id: font_install
         run: ./tests/ci/run-command.ps1 -Name font_install -Executable ./tests/desktop/install-ci-font.ps1; exit $LASTEXITCODE
@@ -120,6 +120,8 @@ jobs:
       - name: Regress old V0.4.2 upgrades and first-navigation evidence
         id: release_regressions
         if: ${{ !cancelled() && steps.site_build.outcome == 'success' }}
+        env:
+          DEBUG: pw:browser
         run: ./tests/ci/run-command.ps1 -Name release_regressions -Executable npm.cmd -Arguments @('run', 'test:release'); exit $LASTEXITCODE
       - name: Chrome and Edge desktop matrix (8 scenarios, 80 grouped checks)
         # Publication checks execute before deploy on main; live verification is a branch/PR check.
@@ -130,6 +132,8 @@ jobs:
       - name: Verify published main SVG maps and basic functions without deployment
         if: github.ref != 'refs/heads/main' && !cancelled() && steps.font_install.outcome == 'success'
         id: live_release
+        env:
+          DEBUG: pw:browser
         run: ./tests/ci/run-command.ps1 -Name live_release -Executable npm.cmd -Arguments @('run', 'test:live'); exit $LASTEXITCODE
       - name: Finalize evidence even when checkout or setup failed
         id: evidence_finish

@@ -603,7 +603,7 @@ function reportView() {
       .map(([v, t]) => option(v, t, reportKind))
       .join(
         "",
-      )}</select></label><div class="button-row"><button class="primary" data-action="build-report">更新預覽</button><button data-action="print">系統列印／另存 PDF</button><button data-action="download-pdf">下載影像式 PDF</button><button data-action="export">匯出完整案件檔</button></div><label class="check-field"><input id="includeRaw" type="checkbox"${includeRaw ? " checked" : ""}>附原始讀數表與更正紀錄</label><label class="check-field"><input id="includePhotos" type="checkbox"${includePhotos ? " checked" : ""}>完整附件包含點位照片</label><label class="check-field"><input id="includeMap" type="checkbox"${includeMap ? " checked" : ""}>完整附件包含佈設圖（有底圖時）</label><p class="hint">系統列印保留向量圖及可選取文字；直接下載 PDF 為影像式。輸出期間請保持此分頁開啟。</p><a class="cloud-folder-link" href="${HANDOFF_FOLDER_URL}" target="_blank" rel="noopener noreferrer">開啟共用雲端資料夾 ↗</a><p class="hint">請將匯出的案件檔放入 Drive 專案資料夾，並在 Drive 確認同步完成。</p><div id="reportWarnings"></div></section><div id="reportRoot" class="report-pages"></div>` +
+      )}</select></label><p id="reportStatus" class="hint" role="status" aria-live="polite"></p><a id="reportPreviewLink" href="#reportRoot" hidden>查看報告預覽 ↓</a><div id="reportWarnings"></div><div class="button-row"><button class="primary" data-action="build-report">更新預覽</button><button data-action="print">系統列印／另存 PDF</button><button data-action="download-pdf">下載影像式 PDF</button><button data-action="export">匯出完整案件檔</button></div><label class="check-field"><input id="includeRaw" type="checkbox"${includeRaw ? " checked" : ""}>附原始讀數表與更正紀錄</label><label class="check-field"><input id="includePhotos" type="checkbox"${includePhotos ? " checked" : ""}>完整附件包含點位照片</label><label class="check-field"><input id="includeMap" type="checkbox"${includeMap ? " checked" : ""}>完整附件包含佈設圖（有底圖時）</label><p class="hint">系統列印保留向量圖及可選取文字；直接下載 PDF 為影像式。輸出期間請保持此分頁開啟。</p><a class="cloud-folder-link" href="${HANDOFF_FOLDER_URL}" target="_blank" rel="noopener noreferrer">開啟共用雲端資料夾 ↗</a><p class="hint">請將匯出的案件檔放入 Drive 專案資料夾，並在 Drive 確認同步完成。</p></section><div id="reportRoot" class="report-pages" tabindex="-1" aria-label="報告預覽" aria-busy="false"></div>` +
     mobileCaseActions()
   );
 }
@@ -705,45 +705,69 @@ function resizeReports() {
   if (root)
     root.style.setProperty("--report-scale", Math.min(1, root.clientWidth / ((210 * 96) / 25.4)));
 }
-function buildReport() {
-  $("#reportRoot").dataset.ready = "false";
+function revealMobileReport(target) {
+  if (tab === "reports" && mobileLayout.matches)
+    target.scrollIntoView({ block: "start" });
+}
+function buildReport({ reveal = false } = {}) {
+  const root = $("#reportRoot"),
+    warnings = $("#reportWarnings"),
+    status = $("#reportStatus"),
+    link = $("#reportPreviewLink");
+  root.dataset.ready = "false";
+  root.setAttribute("aria-busy", "true");
+  link.hidden = true;
+  status.textContent = "正在產生報告預覽…";
   resizeReports();
   const job = ++reportGeneration,
     snapshot = structuredClone(project),
     options = { kind: reportKind, includeRaw, includePhotos, includeMap };
   reportStale = true;
   reportPromise = (async () => {
-    const issues = outputIssues(snapshot, options),
-      missing = Object.keys(snapshot.header).filter((k) => !snapshot.header[k].trim());
-    $("#reportWarnings").innerHTML = issues.length
-      ? `<p class="error">請先完成下列事項：</p><ul>${issues.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`
-      : missing.length
-        ? '<p class="warning">尚有表頭欄位未填，附件以「○○」佔位。</p>'
-        : "";
-    $("#reportRoot").innerHTML = issues.length
-      ? ""
-      : '<p class="report-loading">正在整理附件影像…</p>';
-    if (issues.length) {
-      $("#reportRoot").dataset.ready = "true";
-      return;
-    }
     try {
+      const issues = outputIssues(snapshot, options),
+        missing = Object.keys(snapshot.header).filter((k) => !snapshot.header[k].trim());
+      warnings.innerHTML = issues.length
+        ? `<p class="error">請先完成下列事項：</p><ul>${issues.map((i) => `<li>${esc(i)}</li>`).join("")}</ul>`
+        : missing.length
+          ? '<p class="warning">尚有表頭欄位未填，附件以「○○」佔位。</p>'
+          : "";
+      root.innerHTML = issues.length
+        ? ""
+        : '<p class="report-loading">正在整理附件影像…</p>';
+      if (issues.length) {
+        status.textContent = "尚無報告預覽，請先完成下列事項。";
+        root.dataset.ready = "true";
+        root.setAttribute("aria-busy", "false");
+        if (reveal) revealMobileReport(warnings);
+        return;
+      }
       const html = await fullReport(snapshot, options);
       if (job !== reportGeneration || tab !== "reports" || snapshot.updatedAt !== project.updatedAt)
         return;
       resizeReports();
-      $("#reportRoot").innerHTML = html;
+      root.innerHTML = html;
       await document.fonts.ready;
-      await Promise.all([...$("#reportRoot").querySelectorAll("img")].map((img) => img.decode()));
+      await Promise.all([...root.querySelectorAll("img")].map((img) => img.decode()));
       if (job !== reportGeneration || tab !== "reports" || snapshot.updatedAt !== project.updatedAt)
         return;
       reportStale = false;
       resizeReports();
-      $("#reportRoot").dataset.ready = "true";
+      root.dataset.ready = "true";
+      root.setAttribute("aria-busy", "false");
+      status.textContent = `報告預覽已完成，共 ${root.querySelectorAll(".sheet").length} 頁。`;
+      link.hidden = false;
+      if (reveal) revealMobileReport(root);
     } catch (e) {
       if (job === reportGeneration && tab === "reports") {
-        $("#reportRoot").innerHTML = "";
-        notice(`附件預覽未完成：${e.message}`, true);
+        root.innerHTML = "";
+        root.dataset.ready = "true";
+        root.setAttribute("aria-busy", "false");
+        status.textContent = "預覽未完成，請處理下列訊息後再按「更新預覽」。";
+        const message = `附件預覽未完成：${e.message}`;
+        warnings.innerHTML = `<p class="error" role="alert">${esc(message)}</p>`;
+        notice(message, true);
+        if (reveal) revealMobileReport(warnings);
       }
     }
   })();
@@ -1001,7 +1025,7 @@ async function action(name) {
     confirmObservation(project, pair, f, reason);
     notice(`測點組 ${pair.index} 讀數已確認。`);
   } else if (name === "build-report") {
-    buildReport();
+    buildReport({ reveal: true });
     return;
   } else if (name === "print" || name === "download-pdf") {
     if (tab !== "reports") {

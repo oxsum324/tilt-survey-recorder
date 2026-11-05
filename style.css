@@ -473,6 +473,19 @@ main {
   min-width: 0;
   --report-scale: 1;
 }
+#reportRoot,
+#reportWarnings {
+  scroll-margin-top: calc(var(--app-header-height, 64px) + 60px);
+}
+#reportPreviewLink {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 10px 0;
+  min-height: 44px;
+}
+#reportPreviewLink[hidden] {
+  display: none;
+}
 dialog {
   border: 1px solid var(--line);
   border-radius: 15px;

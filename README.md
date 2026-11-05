@@ -1,9 +1,10 @@
-# 傾斜測量紀錄 V0.6.0
+# 傾斜測量紀錄 V0.6.1
 
 現場功能測試版。純前端 ES modules，無建置工具、無後端，案件、讀數、原始照片與底圖只存在本機瀏覽器。
 
-- [合併發布後的測試網址](https://oxsum324.github.io/tilt-survey-recorder/?release=0.6.0)
+- [合併發布後的測試網址](https://oxsum324.github.io/tilt-survey-recorder/?release=0.6.1)
 - 由 main 的完整檢查通過後發布；網址版本參數本身不會部署新版。
+- [V0.6.1 手機報告預覽與失敗提示](docs/versions/v0.6.1.md)
 - [V0.6.0 底圖立面朝向與立面示意模式](docs/versions/v0.6.0.md)
 - [V0.5.1 共用雲端資料夾連結](docs/versions/v0.5.1.md)
 - [V0.5.0 資料保存、匯入與方向修正](docs/versions/v0.5.0.md)
@@ -41,7 +42,7 @@
 
 IndexedDB 資料庫名稱 `tilt-survey-v1` 不變，內部版本升為 2；project 與 media 分開保存。保存會在同一交易內比對案件修訂，其他分頁已保存新內容時拒絕舊快照回寫，並提示先匯出草稿再重新載入。取代案件期間暫停輸入與保存。草稿自動保存；已確認讀數改動後須填更正原因，否則不產生成果預覽。切換模式保留原資料。可匯出完整案件檔並再匯入；匯入取代前可先匯出、直接取代、取消。案件檔是可編輯 JSON，不是防竄改或簽章文件。
 
-第一次連線成功並顯示「離線資源已準備」後，可離線重新開啟。Service Worker 快取名稱以 `tilt-survey-v0.6.0-` 開頭，末段綁定程式內容雜湊，所有路徑皆相對於專案子目錄。新版完整資源下載後會啟用，下次重新整理載入新介面。若從 V0.1.0 升級，先匯出案件備份、連線重新整理，確認頁首 V0.6.0；若仍顯示舊版，再重新整理一次。案件 schema 仍為 1，可讀舊案件；升級資料庫不刪除既有案件與媒體。
+第一次連線成功並顯示「離線資源已準備」後，可離線重新開啟。Service Worker 快取名稱以 `tilt-survey-v0.6.1-` 開頭，末段綁定程式內容雜湊，所有路徑皆相對於專案子目錄。新版完整資源下載後會啟用，下次重新整理載入新介面。若從 V0.1.0 升級，先匯出案件備份、連線重新整理，確認頁首 V0.6.1；若仍顯示舊版，再重新整理一次。案件 schema 仍為 1，可讀舊案件；升級資料庫不刪除既有案件與媒體。
 
 資料不會上傳 GitHub，裝置與瀏覽器間不會同步；清除網站資料、無痕視窗或瀏覽器儲存空間被回收都可能移除本機案件。完整案件檔應另行保存。「成果與輸出」匯出面板提供「開啟共用雲端資料夾 ↗」；請將匯出的案件檔放入 Drive 專案資料夾，並在 Drive 確認同步完成。雲端資料夾需連線，工具不會自動上傳或確認同步狀態。
 
@@ -63,6 +64,8 @@ npm.cmd start
 ```
 
 瀏覽器測試使用 Playwright；Windows 用已安裝 Google Chrome，其他環境使用 Chromium。若需要，先安裝 `npx playwright install chromium`。本機預覽 `http://127.0.0.1:8789/`。應透過伺服器或正式網址開啟，不能雙擊 index.html。
+
+成果頁會顯示預覽進度、完成頁數與「查看報告預覽」連結；手機按「更新預覽」後直接移到報告，未完成事項或產生失敗原因則顯示在成果頁。Chrome／WebKit 的手機預覽回歸可獨立執行 `npm.cmd run test:report-preview`，須先用專案固定版本執行 `npx.cmd playwright install webkit`。WebKit 模擬不代表 iPhone 實機已驗收。
 
 測試只使用合成資料。截圖與實際 PDF 檢視紀錄在 `output/playwright/` 與 `output/media/`（不提交）。GitHub Actions 先於 Windows 跑資料、既有瀏覽器與 Chrome／Edge 桌機矩陣，再於 main 通過後將明列的程式檔複製到 Pages；不直接發布整個工作目錄。桌機三項補測、Python 依賴、復跑方式與證據範圍見 [tests/desktop/README.md](tests/desktop/README.md)。`node tests/live.mjs` 比對線上部署清冊與全部程式檔雜湊。
 

@@ -3,7 +3,7 @@
 // Versioned shell; all modules load eagerly. Activate the completed cache; a refresh loads the new shell. Case data is unchanged.
 // Bump the shell revision whenever published runtime bytes change, even within one app version.
 // A distinct cache keeps the old complete shell intact until the new install succeeds.
-const CACHE='tilt-survey-v0.6.0-2904e5bfee53bd76';
+const CACHE='tilt-survey-v0.6.1-dfedc3cf27b18cd0';
 const APP_FILES=['./','./index.html','./app.js','./model.js','./integrity.js','./calc.js','./sketch.js','./report.js','./store.js','./style.css','./manifest.webmanifest','./icon.svg','./icon-180.png','./icon-192.png','./icon-512.png','./annotation-geometry.js','./annotation.js','./exif.js','./media.js','./media-ui.js','./plan.js','./media-report.js','./pdf.js','./display.js','./sketch-editor.js','./vendor/html2pdf.bundle.min.js','./vendor/html2pdf-LICENSE.txt','./vendor/html2pdf.bundle.min.js.LICENSE.txt'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(APP_FILES.map(url=>new Request(new URL(url,self.registration.scope),{cache:'reload'})))).then(()=>self.skipWaiting())));
 self.addEventListener('message',event=>{if(event.data==='SKIP_WAITING')self.skipWaiting();});
