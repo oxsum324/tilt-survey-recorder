@@ -4,6 +4,18 @@ import {calculatePair} from './calc.js';
 import {clamp,arrowPath} from './annotation-geometry.js';
 import {createMagnifier} from './annotation.js';
 export const PAPER={width:180,height:210};
+// 圖面辨識建議值，非規範門檻；長度為 180×210 紙面座標單位。
+// 假設量測高度採預設標準層高 3200 mm：3200 × 1/200 = 16 mm；建議值，待瀚文確認。
+export const TILT_ARROW_REFERENCE_DX_MM=16;
+export const TILT_ARROW_REFERENCE_LENGTH=7.3;
+export const TILT_ARROW_MIN_LENGTH=4;
+export const TILT_ARROW_MAX_LENGTH=14;
+export const TILT_ARROW_START=2.2;
+export function tiltArrowLength(dxMm){
+  return clamp(Math.abs(dxMm)/TILT_ARROW_REFERENCE_DX_MM*TILT_ARROW_REFERENCE_LENGTH,TILT_ARROW_MIN_LENGTH,TILT_ARROW_MAX_LENGTH);
+}
+const CALLOUT_STYLE='fill="none" stroke="#111" stroke-width=".4"';
+const tiltStyle=axis=>`fill="none" stroke="#111" stroke-width="1"${axis==='outPlane'?' stroke-dasharray="2.2 1"':''}`;
 export function imageBounds(width,height){const scale=Math.min(PAPER.width/width,PAPER.height/height);return {x:(PAPER.width-width*scale)/2,y:(PAPER.height-height*scale)/2,w:width*scale,h:height*scale};}
 export function markerAt(x,y,bounds){return {x:clamp(x,0,100),y:clamp(y,0,100),inPlane:{dx:12/bounds.w*100,dy:5/bounds.h*100},outPlane:{dx:12/bounds.w*100,dy:-5/bounds.h*100}};}
 export function markerGeometry(marker,bounds,axis,text){
@@ -26,17 +38,38 @@ export function tiltArrows(point,pair,facade,settings){
   if(facade?.planNormalDeg==null||!isConfirmed(pair,facade))return '';
   const result=calculatePair(pair,facade,settings);
   return ['inPlane','outPlane'].map(axis=>{const r=result[axis];if(r.status!=='ok'||!r.dxMm||!r.direction)return '';const v=tiltVector(r.direction,facade.planNormalDeg);
-    return `<path data-tilt="${axis}" data-direction="${r.direction}" d="${arrowPath(at(point,v,2.2),at(point,v,9.5),2.2)}" fill="none" stroke="#111" stroke-width=".7"${axis==='outPlane'?' stroke-dasharray="2.2 1"':''}/>`;}).join('');
+    return `<path class="tilt" data-kind="tilt" data-tilt="${axis}" data-direction="${r.direction}" d="${arrowPath(at(point,v,TILT_ARROW_START),at(point,v,TILT_ARROW_START+tiltArrowLength(r.dxMm)),2.2)}" ${tiltStyle(axis)}/>`;}).join('');
+}
+// 優先選底圖外留白，再比較角落與測點、文字框、引線的重疊面積。
+function tiltLegend(bounds,occupied){
+  const w=39,h=21,pad=3;
+  const overlap=(a,b)=>Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x))*Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+  const corners=[{x:PAPER.width-w-pad,y:PAPER.height-h-pad},{x:pad,y:PAPER.height-h-pad},{x:PAPER.width-w-pad,y:pad},{x:pad,y:pad}].map(p=>({...p,w,h}));
+  const score=p=>occupied.reduce((sum,b)=>sum+overlap(p,b),0)*1000+overlap(p,bounds);
+  const box=corners.reduce((a,b)=>score(b)<score(a)?b:a);
+  const rows=[['callout','文字框引線'],['inPlane','面內傾斜'],['outPlane','面外傾斜']].map(([kind,text],i)=>{
+    const y=5+i*5.5,style=kind==='callout'?CALLOUT_STYLE:tiltStyle(kind);
+    return `<path d="${arrowPath({x:2,y},{x:12,y},kind==='callout'?2:2.2)}" ${style}/><text x="15" y="${y}" dominant-baseline="central" font-size="3" fill="#111">${text}</text>`;
+  }).join('');
+  return `<g data-legend="tilt" transform="translate(${box.x} ${box.y})" pointer-events="none"><rect width="${w}" height="${h}" rx="1" fill="white" stroke="#111" stroke-width=".3"/>${rows}</g>`;
 }
 export function planSvg(project,url,{editor=false,selectedId=''}={}){
-  const b=imageBounds(project.map.width,project.map.height);
+  const b=imageBounds(project.map.width,project.map.height),occupied=[];
+  const arrows=new Map(project.pairs.filter(p=>p.mapMarker).map(p=>{
+    const point=markerGeometry(p.mapMarker,b,'inPlane','').point,facade=project.facades.find(f=>f.id===p.facadeId);
+    return [p.id,tiltArrows(point,p,facade,project.settings)];
+  }));
+  const hasTilt=[...arrows.values()].some(Boolean);
   const marks=project.pairs.filter(p=>p.mapMarker).map(p=>{
     const l=labels(p,project.settings),m=p.mapMarker,point=markerGeometry(m,b,'inPlane',l.inPlane).point,facade=project.facades.find(f=>f.id===p.facadeId);
-    const glyph=facingGlyph(point,facade)+tiltArrows(point,p,facade,project.settings);
-    const labelMarkup=['inPlane','outPlane'].map(axis=>{const {box,start}=markerGeometry(m,b,axis,l[axis]);return `<g${editor?` data-handle="label" data-pair-id="${p.id}" data-axis="${axis}"`:''}><path d="${arrowPath(start,point,2)}" fill="none" stroke="#111" stroke-width=".4"/><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="white" stroke="#111" stroke-width=".3"/><text x="${box.x+box.w/2}" y="${box.y+box.h/2}" dominant-baseline="central" text-anchor="middle" font-size="3.2" font-weight="bold" fill="#111">${esc(l[axis])}</text></g>`;}).join('');
+    const glyph=facingGlyph(point,facade)+arrows.get(p.id);
+    const radius=TILT_ARROW_START+TILT_ARROW_MAX_LENGTH+2;
+    occupied.push({x:point.x-radius,y:point.y-radius,w:radius*2,h:radius*2});
+    const labelMarkup=['inPlane','outPlane'].map(axis=>{const {box,start}=markerGeometry(m,b,axis,l[axis]);
+      occupied.push(box,{x:Math.min(start.x,point.x),y:Math.min(start.y,point.y),w:Math.abs(start.x-point.x),h:Math.abs(start.y-point.y)});return `<g${editor?` data-handle="label" data-pair-id="${p.id}" data-axis="${axis}"`:''}><path${hasTilt?' class="callout" data-kind="callout"':''} d="${arrowPath(start,point,2)}" ${CALLOUT_STYLE}/><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="white" stroke="#111" stroke-width=".3"/><text x="${box.x+box.w/2}" y="${box.y+box.h/2}" dominant-baseline="central" text-anchor="middle" font-size="3.2" font-weight="bold" fill="#111">${esc(l[axis])}</text></g>`;}).join('');
     return glyph+labelMarkup+`<g${editor?` data-handle="point" data-pair-id="${p.id}"`:''}><circle cx="${point.x}" cy="${point.y}" r="1.5" fill="#111" stroke="white" stroke-width=".4"/>${editor?`<circle cx="${point.x}" cy="${point.y}" r="5" fill="transparent" stroke="${p.id===selectedId?'#c42e27':'transparent'}" stroke-width=".45"/>`:''}</g>`;
   }).join('');
-  return `<svg xmlns="http://www.w3.org/2000/svg" class="plan-svg" viewBox="0 0 180 210" role="img" aria-label="傾斜測點佈設圖"><rect width="180" height="210" fill="white"/><image href="${esc(url)}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="xMidYMid meet"/>${marks}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" class="plan-svg" viewBox="0 0 180 210" role="img" aria-label="傾斜測點佈設圖"><rect width="180" height="210" fill="white"/><image href="${esc(url)}" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" preserveAspectRatio="xMidYMid meet"/>${marks}${hasTilt?tiltLegend(b,occupied):''}</svg>`;
 }
 export function createPlanEditor(stage,project,url,getSelected,onChange,onSelect){
   const b=imageBounds(project.map.width,project.map.height),lens=createMagnifier(url,project.map.width,project.map.height);let zoom=1,pan={x:0,y:0},mode='place',drag=null,lastSvg;
