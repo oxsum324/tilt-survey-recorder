@@ -5,13 +5,14 @@ import {clamp,arrowPath} from './annotation-geometry.js';
 import {createMagnifier} from './annotation.js';
 export const PAPER={width:180,height:210};
 // 圖面辨識建議值，非規範門檻；長度為 180×210 紙面座標單位。
-export const TILT_ARROW_REFERENCE_RATIO=1/200;
+// 假設量測高度採預設標準層高 3200 mm：3200 × 1/200 = 16 mm；建議值，待瀚文確認。
+export const TILT_ARROW_REFERENCE_DX_MM=16;
 export const TILT_ARROW_REFERENCE_LENGTH=7.3;
 export const TILT_ARROW_MIN_LENGTH=4;
 export const TILT_ARROW_MAX_LENGTH=14;
 export const TILT_ARROW_START=2.2;
-export function tiltArrowLength(value){
-  return clamp(Math.abs(value)/TILT_ARROW_REFERENCE_RATIO*TILT_ARROW_REFERENCE_LENGTH,TILT_ARROW_MIN_LENGTH,TILT_ARROW_MAX_LENGTH);
+export function tiltArrowLength(dxMm){
+  return clamp(Math.abs(dxMm)/TILT_ARROW_REFERENCE_DX_MM*TILT_ARROW_REFERENCE_LENGTH,TILT_ARROW_MIN_LENGTH,TILT_ARROW_MAX_LENGTH);
 }
 const CALLOUT_STYLE='fill="none" stroke="#111" stroke-width=".4"';
 const tiltStyle=axis=>`fill="none" stroke="#111" stroke-width="1"${axis==='outPlane'?' stroke-dasharray="2.2 1"':''}`;
@@ -37,7 +38,7 @@ export function tiltArrows(point,pair,facade,settings){
   if(facade?.planNormalDeg==null||!isConfirmed(pair,facade))return '';
   const result=calculatePair(pair,facade,settings);
   return ['inPlane','outPlane'].map(axis=>{const r=result[axis];if(r.status!=='ok'||!r.dxMm||!r.direction)return '';const v=tiltVector(r.direction,facade.planNormalDeg);
-    return `<path class="tilt" data-kind="tilt" data-tilt="${axis}" data-direction="${r.direction}" d="${arrowPath(at(point,v,TILT_ARROW_START),at(point,v,TILT_ARROW_START+tiltArrowLength(r.dxMm/r.hMm)),2.2)}" ${tiltStyle(axis)}/>`;}).join('');
+    return `<path class="tilt" data-kind="tilt" data-tilt="${axis}" data-direction="${r.direction}" d="${arrowPath(at(point,v,TILT_ARROW_START),at(point,v,TILT_ARROW_START+tiltArrowLength(r.dxMm)),2.2)}" ${tiltStyle(axis)}/>`;}).join('');
 }
 // 優先選底圖外留白，再比較角落與測點、文字框、引線的重疊面積。
 function tiltLegend(bounds,occupied){

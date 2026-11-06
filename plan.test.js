@@ -1,7 +1,7 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {calculatePair} from './calc.js';
-import {tiltArrowLength,TILT_ARROW_REFERENCE_RATIO,TILT_ARROW_REFERENCE_LENGTH,TILT_ARROW_MIN_LENGTH,TILT_ARROW_MAX_LENGTH,TILT_ARROW_START} from './plan.js';
+import {tiltArrowLength,TILT_ARROW_REFERENCE_DX_MM,TILT_ARROW_REFERENCE_LENGTH,TILT_ARROW_MIN_LENGTH,TILT_ARROW_MAX_LENGTH,TILT_ARROW_START} from './plan.js';
 import {sampleProject,confirmObservation} from './model.js';
 import {planVectors,tiltVector,facingGlyph,tiltArrows,planSvg,imageBounds,markerAt} from './plan.js';
 const near=(a,b)=>assert.ok(Math.abs(a-b)<1e-9,`${a} ≠ ${b}`);
@@ -19,26 +19,30 @@ test('更改底圖朝向或示意位置不影響讀數確認狀態',async()=>{co
 
 test('箭身長度：小值取下限、大值取上限、中間值單調增加',()=>{
   assert.equal(tiltArrowLength(0),TILT_ARROW_MIN_LENGTH);
-  assert.equal(tiltArrowLength(1/100000),TILT_ARROW_MIN_LENGTH);
-  assert.equal(tiltArrowLength(1),TILT_ARROW_MAX_LENGTH);
-  near(tiltArrowLength(TILT_ARROW_REFERENCE_RATIO),TILT_ARROW_REFERENCE_LENGTH);
-  const values=[1/300,1/200,1/150].map(tiltArrowLength);
+  assert.equal(tiltArrowLength(1),TILT_ARROW_MIN_LENGTH);
+  assert.equal(tiltArrowLength(100),TILT_ARROW_MAX_LENGTH);
+  assert.equal(TILT_ARROW_REFERENCE_DX_MM,16);
+  near(tiltArrowLength(TILT_ARROW_REFERENCE_DX_MM),TILT_ARROW_REFERENCE_LENGTH);
+  const values=[12,16,20].map(tiltArrowLength);
   assert.ok(values[0]<values[1]&&values[1]<values[2]);
-  near(tiltArrowLength(-1/200),tiltArrowLength(1/200));
+  near(tiltArrowLength(-16),tiltArrowLength(16));
 });
 
-test('實際箭身依各分量傾斜率縮放，箭尾位置固定，量測資料不變',()=>{
+test('實際箭身依各分量水平偏移量縮放，箭尾位置固定，量測資料不變；改變 H 不改箭長',()=>{
   const p=withMap(),pair=p.pairs[0],f=p.facades[0],point={x:50,y:50};f.planNormalDeg=0;
   const before=structuredClone(p),result=calculatePair(pair,f,p.settings);
   const paths=tiltArrows(point,pair,f,p.settings).match(/<path[^>]+>/g);
   for(const [i,axis] of ['inPlane','outPlane'].entries()){
     const s=segment(paths[i]);near(Math.hypot(s.x1-point.x,s.y1-point.y),TILT_ARROW_START);
-    near(Math.hypot(s.x2-s.x1,s.y2-s.y1),tiltArrowLength(result[axis].dxMm/result[axis].hMm));
+    near(Math.hypot(s.x2-s.x1,s.y2-s.y1),tiltArrowLength(result[axis].dxMm));
   }
   assert.deepEqual(p,before);
   pair.inPlane.A.hCm=String(Number(pair.inPlane.A.hCm)*2);confirmObservation(p,pair,f,'測試');
-  const longer=segment(tiltArrows(point,pair,f,p.settings)),original=segment(paths[0]);
-  assert.ok(Math.hypot(longer.x2-longer.x1,longer.y2-longer.y1)<Math.hypot(original.x2-original.x1,original.y2-original.y1));
+  const changed=calculatePair(pair,f,p.settings);
+  assert.equal(changed.inPlane.dxMm,result.inPlane.dxMm);
+  near(changed.inPlane.hMm,result.inPlane.hMm*2);
+  assert.ok(changed.inPlane.dxMm/changed.inPlane.hMm<result.inPlane.dxMm/result.inPlane.hMm);
+  assert.equal(tiltArrows(point,pair,f,p.settings),paths.join(''));
 });
 
 test('引線與傾斜箭頭具分類屬性與不同線寬，圖例共用相同線型',()=>{
