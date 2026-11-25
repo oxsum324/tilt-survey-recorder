@@ -162,6 +162,69 @@ a {
   max-width: 1500px;
   margin: auto;
 }
+.workspace-mode-bar {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.workspace-mode-bar button {
+  min-height: 36px;
+  padding: 5px 10px;
+  font-size: 12px;
+}
+.workspace-mode-bar button[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
+}
+body[data-workspace-mode="field"] [data-field-secondary="1"] {
+  opacity: 0.72;
+}
+body[data-workspace-mode="field"] [data-field-secondary="1"] .form-grid,
+body[data-workspace-mode="field"] [data-field-secondary="1"] .check-field {
+  display: none;
+}
+.office-preview-aside {
+  display: none;
+  padding: 20px 16px;
+  border-left: 1px solid var(--line);
+  background: var(--paper);
+  min-width: 0;
+}
+.office-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.office-preview-head button {
+  min-height: 36px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+.office-preview-row {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  background: var(--bg);
+}
+@media screen and (min-width: 1360px) {
+  body[data-workspace-mode="office"] .shell {
+    max-width: 1760px;
+    grid-template-columns: 230px minmax(0, 1fr) 360px;
+  }
+  body[data-workspace-mode="office"] .office-preview-aside:not([hidden]) {
+    display: block;
+    position: sticky;
+    top: 12px;
+    align-self: start;
+    max-height: calc(100vh - 24px);
+    overflow: auto;
+  }
+}
 .sidebar {
   padding: 30px 18px;
   border-right: 1px solid var(--line);
