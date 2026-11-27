@@ -183,6 +183,7 @@ function mobileCaseActions() {
   return `<section class="card mobile-case-actions" aria-label="案件檔案操作"><h3>案件檔案與備份</h3><div class="button-row"><button data-action="export">匯出案件檔</button><button data-action="import">匯入案件檔</button><button data-action="verify-file">驗證案件檔指紋</button><span class="share-slot"></span></div><p class="hint">不同裝置不會同步；離開現場前請確認完整案件檔已保存。</p></section>`;
 }
 function updateCaseSummary() {
+  updateOfficePreview();
   const completed = project.pairs.reduce((n, p) => {
     const f = project.facades.find((f) => f.id === p.facadeId);
     if (!f || !isConfirmed(p, f)) return n;
@@ -244,15 +245,29 @@ function responsiveChrome() {
 }
 mobileLayout.addEventListener("change", responsiveChrome);
 responsiveChrome();
+function seedUnitsForProject(id) {
+  try {
+    const raw = JSON.parse(localStorage.getItem(`tilt-survey-seed-units:${id}`) || "[]");
+    return Array.isArray(raw) ? raw : [];
+  } catch {
+    return [];
+  }
+}
 function caseView() {
   const h = project.header;
+  const seedUnits = seedUnitsForProject(project.id);
+  setTimeout(() => {
+    const el = workspace.querySelector('[data-field="header.householdNo"]');
+    if (el) el.setAttribute("list", "tiltSeedHouseholds");
+  }, 0);
   return (
     heading(
       "案件設定",
       "先留下這次量測的基本資料",
       "表頭皆可編輯；未填欄位會以「○○」呈現，並在輸出前提醒。",
     ) +
-    `<section class="card"><h3>案件與成果表表頭</h3><div class="form-grid">${[
+    `<datalist id="tiltSeedHouseholds">${seedUnits.map((u) => `<option value="${esc(u.code)}">${esc(u.address || "")}</option>`).join("")}</datalist>
+    <section class="card"><h3>案件與成果表表頭</h3><div class="form-grid">${[
       ["orgName", "公會／機關名稱"],
       ["caseNumber", "鑑定案編號"],
       ["householdNo", "住戶編號"],
@@ -278,7 +293,7 @@ function caseView() {
           `<button data-default-mode="${m}" class="mode-card${project.settings.defaultMode === m ? " selected" : ""}" aria-pressed="${project.settings.defaultMode === m}"><span class="mode-icon">${icon}</span><b>${m}｜${t}</b><span>${d}</span></button>`,
       )
       .join("")}</div></section>
-    <section class="card"><h3>量測提示與編號 <span class="tag">可調整</span></h3><p>下列設定僅作讀數提示，不是規範判定值。</p><div class="form-grid">${input("兩測回較差提示值", "settings.toleranceMm", project.settings.toleranceMm, { unit: "mm" })}${input("小偏移提示值", "settings.minOffsetMm", project.settings.minOffsetMm, { unit: "mm" })}${input("短垂距提示值", "settings.minHeightCm", project.settings.minHeightCm, { unit: "cm" })}${select(
+    <section class="card" data-field-secondary="1"><h3>量測提示與編號 <span class="tag">可調整 · 外業可略</span></h3><p>下列設定僅作讀數提示，不是規範判定值。</p><div class="form-grid">${input("兩測回較差提示值", "settings.toleranceMm", project.settings.toleranceMm, { unit: "mm" })}${input("小偏移提示值", "settings.minOffsetMm", project.settings.minOffsetMm, { unit: "mm" })}${input("短垂距提示值", "settings.minHeightCm", project.settings.minHeightCm, { unit: "cm" })}${select(
       "測線編號",
       "settings.labelStyle",
       project.settings.labelStyle,
@@ -287,7 +302,7 @@ function caseView() {
         ["TS", "T1／S1（自訂對應）"],
       ],
     )}</div>${check("方向加註絕對方位（須填立面朝向）", "settings.showCompass", project.settings.showCompass)}<p class="hint">T／S 在本工具僅為立面內、立面外的命名選項；與特定手冊之工地相對方向不自動對應。</p></section>
-    <section class="card"><h3>開始試填</h3><div class="button-row"><button class="primary" data-action="tab-readings">前往測點與讀數 →</button><button data-action="sample">載入範本合成示例</button><button data-action="new">另建空白案件</button></div><p class="hint">示例僅含樣張數值，不含真實案件資料。</p></section>` +
+    <section class="card"><h3>開始試填</h3><div class="button-row"><button class="primary" data-action="tab-readings">前往測點與讀數 →</button><button data-action="import-seed">從派案種子開案</button><button data-action="copy-filename">複製標準檔名</button><button data-action="sample">載入範本合成示例</button><button data-action="new">另建空白案件</button></div><p class="hint">示例僅含樣張數值，不含真實案件資料。</p></section>` +
     mobileCaseActions()
   );
 }
@@ -799,6 +814,14 @@ function invalidateShare() {
   button.textContent = "準備分享案件檔";
   button.disabled = sharing;
 }
+function standardCaseFileName(target = project) {
+  const clean = (v) => String(v ?? "").trim().replace(/[<>:"/\\|?*]/g, "_");
+  const code = clean(target?.header?.caseNumber) || "傾斜測量";
+  const unit = clean(target?.header?.householdNo) || "未填戶號";
+  const rawDate = clean(target?.header?.surveyDate);
+  const date = rawDate || new Date().toISOString().slice(0, 10);
+  return `${code}_${unit}_${date}.tiltsurvey`;
+}
 async function caseFile() {
   if (replacing) throw Error("案件取代中，請稍候再匯出。");
   const origin = project,
@@ -810,7 +833,7 @@ async function caseFile() {
     blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   if (blob.size > 250 * 1024 * 1024)
     throw Error("案件檔超過 250 MB，請先另存照片原檔並減少本案件照片。");
-  const name = `傾斜測量_${(backupProject.header.caseNumber || "未命名").replace(/[<>:"/\\|?*]/g, "_")}_${new Date().toISOString().slice(0, 10)}.tiltsurvey`;
+  const name = standardCaseFileName(backupProject);
   return {
     origin,
     updatedAt: backupProject.updatedAt,
@@ -925,9 +948,134 @@ async function adopt(newProject, media = []) {
     delete document.documentElement.dataset.replacing;
   }
 }
+function parseCaseSeedPayload(raw) {
+  let seed;
+  try {
+    seed = JSON.parse(raw);
+  } catch {
+    throw Error("派案種子檔案不是有效的 JSON 格式。");
+  }
+  if (!seed || seed.format !== "field-case-seed.v1")
+    throw Error("不支援的派案種子格式（須為 field-case-seed.v1）。");
+  const caseNumber = String(seed.caseNumber || seed.caseCode || "").trim();
+  const orgName = String(seed.orgName || "").trim();
+  const units = Array.isArray(seed.units)
+    ? seed.units
+        .map((item) => ({
+          code: String(item?.code || "").trim(),
+          address: String(item?.address || "").trim(),
+        }))
+        .filter((item) => item.code)
+    : [];
+  const address = String(seed.address || units[0]?.address || "").trim();
+  const surveyDate = /^\d{4}-\d{2}-\d{2}$/.test(String(seed.surveyDate || ""))
+    ? seed.surveyDate
+    : new Date().toISOString().slice(0, 10);
+  if (!caseNumber && !seed.caseName && !units.length)
+    throw Error("派案種子缺少案號或戶別清單。");
+  return { caseNumber, orgName, address, surveyDate, units };
+}
+function updateOfficePreview() {
+  const aside = $("#officePreviewAside"),
+    body = $("#officePreviewBody");
+  if (!aside || !body) return;
+  const active = !!project && document.body.dataset.workspaceMode === "office" && tab !== "reports";
+  aside.hidden = !active;
+  if (!active) {
+    body.innerHTML = "";
+    return;
+  }
+  body.innerHTML =
+    project.pairs
+      .map((pair) => {
+        const facade = project.facades.find((f) => f.id === pair.facadeId);
+        const res = calculatePair(pair, facade, project.settings);
+        const l = labels(pair, project.settings);
+        const confirmed = isConfirmed(pair, facade) ? "已確認" : "待確認";
+        const fmt = (axis) => {
+          const v = res[axis];
+          if (v.status === "ok") return `${esc(v.ratioText)}（${esc(v.directionText)}）`;
+          return v.status === "skipped" ? "未施測" : "待完成";
+        };
+        return `<div class="office-preview-row"><b>${esc(pair.code)} · ${esc(facade?.name || "未選立面")}</b> <small>（${confirmed}）</small><div>${esc(l.inPlane)}：${fmt("inPlane")}</div><div>${esc(l.outPlane)}：${fmt("outPlane")}</div></div>`;
+      })
+      .join("") || '<p class="hint">尚無測點組</p>';
+}
+function applyWorkspaceMode(mode) {
+  const normalized = mode === "field" || mode === "office" ? mode : "auto";
+  if (normalized === "auto") delete document.body.dataset.workspaceMode;
+  else document.body.dataset.workspaceMode = normalized;
+  try {
+    localStorage.setItem("tilt-survey-workspace-mode", normalized);
+  } catch {}
+  $("#modeFieldBtn")?.setAttribute("aria-pressed", String(normalized === "field"));
+  $("#modeOfficeBtn")?.setAttribute("aria-pressed", String(normalized === "office"));
+  updateOfficePreview();
+}
+applyWorkspaceMode(
+  (() => {
+    try {
+      return localStorage.getItem("tilt-survey-workspace-mode") || "auto";
+    } catch {
+      return "auto";
+    }
+  })(),
+);
+document.addEventListener("change", async (event) => {
+  if (event.target?.id === "seedFile") {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    try {
+      const seed = parseCaseSeedPayload(await file.text());
+      if (await allowReplace("從派案種子建立案件")) {
+        const next = createProject();
+        next.header.caseNumber = seed.caseNumber;
+        next.header.orgName = seed.orgName;
+        next.header.address = seed.address;
+        next.header.surveyDate = seed.surveyDate;
+        try {
+          localStorage.setItem(`tilt-survey-seed-units:${next.id}`, JSON.stringify(seed.units));
+        } catch {}
+        await adopt(next);
+        notice(`已載入派案種子（${seed.units.length} 筆戶別可供快選）。`);
+      }
+    } catch (error) {
+      notice(`無法載入派案種子：${error.message}`, true);
+    }
+    return;
+  }
+  updateOfficePreview();
+});
+document.addEventListener("input", () => updateOfficePreview());
+document.addEventListener("click", (event) => {
+  if (event.target?.closest?.("[data-tab]")) updateOfficePreview();
+});
 async function action(name) {
   const pair = project.pairs.find((p) => p.id === selectedPair),
     facade = project.facades.find((f) => f.id === selectedFacade);
+  if (name === "mode-field") {
+    applyWorkspaceMode(document.body.dataset.workspaceMode === "field" ? "auto" : "field");
+    return;
+  }
+  if (name === "mode-office") {
+    applyWorkspaceMode(document.body.dataset.workspaceMode === "office" ? "auto" : "office");
+    return;
+  }
+  if (name === "import-seed") {
+    $("#seedFile").click();
+    return;
+  }
+  if (name === "copy-filename") {
+    const fileName = standardCaseFileName(project);
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(fileName);
+      notice(`標準檔名已準備：${fileName}`);
+    } catch {
+      notice(`標準檔名：${fileName}`);
+    }
+    return;
+  }
   if (name === "export") return exportCase();
   if (name === "share") return preparedShare ? shareCase() : prepareShare();
   if (name === "toggle-results") {
@@ -954,11 +1102,13 @@ async function action(name) {
   if (name === "tab-photos" || name === "tab-map") {
     tab = name === "tab-photos" ? "photos" : "map";
     render();
+    updateOfficePreview();
     return;
   }
   if (name === "tab-readings" || name === "preview") {
     tab = name === "preview" ? "reports" : "readings";
     render();
+    updateOfficePreview();
     window.scrollTo(0, 0);
     return;
   }
